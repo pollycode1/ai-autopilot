@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>คลังความรู้การลงทุนไทย — รวบรวมข้อมูล + ตัวช่วยวางกลยุทธ์</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="brand">💰 คลังความรู้การลงทุนไทย</div>
+  <nav class="tabs" id="tabs">
+    <button class="tab-btn active" data-tab="overview">ภาพรวม</button>
+    <button class="tab-btn" data-tab="compare">เปรียบเทียบ</button>
+    <button class="tab-btn" data-tab="risk">ประเมินความเสี่ยง</button>
+    <button class="tab-btn" data-tab="calc">เครื่องคำนวณ</button>
+    <button class="tab-btn" data-tab="strategies">กลยุทธ์ตัวอย่าง</button>
+  </nav>
+</header>
+
+<div class="disclaimer">
+  ⚠️ <strong>คำเตือน:</strong> เว็บไซต์นี้จัดทำขึ้นเพื่อ<strong>การศึกษาเท่านั้น</strong> ไม่ถือเป็นคำแนะนำการลงทุน
+  ตัวเลขผลตอบแทน/ความเสี่ยงเป็นข้อมูลในอดีตหรือค่าประมาณ ไม่ได้การันตีผลตอบแทนในอนาคต
+  โปรดศึกษาข้อมูลล่าสุดจากแหล่งที่มาที่อ้างอิง และปรึกษาผู้เชี่ยวชาญ/ผู้แนะนำการลงทุนที่ได้รับอนุญาตก่อนตัดสินใจลงทุนจริง
+</div>
+
+<main id="app">
+
+  <section id="tab-overview" class="tab-panel active">
+    <h1>ภาพรวมประเภทการลงทุน</h1>
+    <p class="sub">คลิกที่การ์ดเพื่อดูรายละเอียด: ผลตอบแทนคาดหวัง ความเสี่ยง สภาพคล่อง เงินขั้นต่ำ ภาษี ช่องทางลงทุน ข้อดี-ข้อเสีย</p>
+    <div id="cards" class="card-grid"></div>
+  </section>
+
+  <section id="tab-compare" class="tab-panel">
+    <h1>เปรียบเทียบประเภทการลงทุน</h1>
+    <div class="chart-wrap">
+      <h3>ความเสี่ยง vs ผลตอบแทนคาดหวัง (โดยประมาณ)</h3>
+      <canvas id="riskReturnChart" width="800" height="420"></canvas>
+    </div>
+    <div class="table-wrap">
+      <table id="compareTable">
+        <thead>
+          <tr>
+            <th>ประเภท</th><th>ผลตอบแทนคาดหวัง</th><th>ความเสี่ยง</th><th>สภาพคล่อง</th><th>เงินขั้นต่ำ</th><th>สิทธิภาษี</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="tab-risk" class="tab-panel">
+    <h1>แบบประเมินความเสี่ยงที่รับได้ &amp; สัดส่วนพอร์ตที่แนะนำ</h1>
+    <form id="riskForm" class="quiz"></form>
+    <div id="riskResult" class="result-box hidden"></div>
+  </section>
+
+  <section id="tab-calc" class="tab-panel">
+    <h1>เครื่องคำนวณการลงทุน</h1>
+
+    <div class="calc-card">
+      <h2>1) DCA (ลงทุนสม่ำเสมอทุกเดือน)</h2>
+      <div class="calc-grid">
+        <label>เงินลงทุนต่อเดือน (บาท)
+          <input type="number" id="dcaMonthly" value="5000" min="0" step="100">
+        </label>
+        <label>ผลตอบแทนคาดหวังต่อปี (%)
+          <input type="number" id="dcaReturn" value="8" min="-50" max="100" step="0.1">
+        </label>
+        <label>ระยะเวลา (ปี)
+          <input type="number" id="dcaYears" value="10" min="1" max="60" step="1">
+        </label>
+      </div>
+      <button type="button" id="dcaBtn" class="btn-primary">คำนวณ</button>
+      <div id="dcaResult" class="result-box hidden"></div>
+    </div>
+
+    <div class="calc-card">
+      <h2>2) ดอกเบี้ยทบต้น (เงินก้อนเดียว)</h2>
+      <div class="calc-grid">
+        <label>เงินต้น (บาท)
+          <input type="number" id="ciPrincipal" value="100000" min="0" step="1000">
+        </label>
+        <label>ผลตอบแทนต่อปี (%)
+          <input type="number" id="ciReturn" value="8" min="-50" max="100" step="0.1">
+        </label>
+        <label>ระยะเวลา (ปี)
+          <input type="number" id="ciYears" value="10" min="1" max="60" step="1">
+        </label>
+        <label>ทบต้นกี่ครั้งต่อปี
+          <select id="ciFreq">
+            <option value="1">ปีละ 1 ครั้ง</option>
+            <option value="12" selected>รายเดือน (12)</option>
+            <option value="365">รายวัน (365)</option>
+          </select>
+        </label>
+      </div>
+      <button type="button" id="ciBtn" class="btn-primary">คำนวณ</button>
+      <div id="ciResult" class="result-box hidden"></div>
+    </div>
+
+    <div class="calc-card">
+      <h2>3) เป้าหมายเกษียณ / เป้าหมายเงินก้อน</h2>
+      <div class="calc-grid">
+        <label>เงินเป้าหมายที่ต้องการ (บาท)
+          <input type="number" id="goalTarget" value="3000000" min="0" step="10000">
+        </label>
+        <label>เงินก้อนที่มีอยู่แล้ว (บาท)
+          <input type="number" id="goalStart" value="0" min="0" step="1000">
+        </label>
+        <label>ผลตอบแทนคาดหวังต่อปี (%)
+          <input type="number" id="goalReturn" value="8" min="-50" max="100" step="0.1">
+        </label>
+        <label>ระยะเวลา (ปี)
+          <input type="number" id="goalYears" value="15" min="1" max="60" step="1">
+        </label>
+      </div>
+      <button type="button" id="goalBtn" class="btn-primary">คำนวณเงินที่ต้องลงทุนต่อเดือน</button>
+      <div id="goalResult" class="result-box hidden"></div>
+    </div>
+  </section>
+
+  <section id="tab-strategies" class="tab-panel">
+    <h1>กลยุทธ์การลงทุนตัวอย่าง 3 แบบ</h1>
+    <p class="sub">ตัวอย่างเพื่อการศึกษา ไม่ใช่คำแนะนำเฉพาะบุคคล ควรปรับตามสถานการณ์และความเสี่ยงที่รับได้ของตนเอง</p>
+    <div id="strategies" class="strategy-grid"></div>
+  </section>
+
+</main>
+
+<div id="detailModal" class="modal hidden">
+  <div class="modal-content">
+    <button class="modal-close" id="modalClose">✕</button>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<footer class="site-footer">
+  <p>จัดทำเพื่อการศึกษา | ข้อมูลอ้างอิงจากแหล่งสาธารณะ โปรดตรวจสอบข้อมูลล่าสุดก่อนใช้งานจริง</p>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
