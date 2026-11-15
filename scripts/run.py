@@ -71,6 +71,11 @@ def add_log(tid, text):
 
 def sync(msg):
     """commit แล้ว push; ถ้า tasks.json ชนกับที่แก้จากแอป ให้รวมข้อมูลอัตโนมัติ"""
+    # คัดลอกผลงานไปไว้ใน docs/ เพื่อให้เปิดดูผ่านเว็บได้ (GitHub Pages)
+    if (ROOT / "workspace").is_dir():
+        import shutil
+        shutil.copytree(ROOT / "workspace", ROOT / "docs/workspace", dirs_exist_ok=True,
+                        ignore=shutil.ignore_patterns("node_modules", ".venv", "__pycache__", ".git"))
     sh("git", "add", "-A")
     if sh("git", "diff", "--cached", "--quiet", check=False).returncode != 0:
         sh("git", "commit", "-q", "-m", msg)

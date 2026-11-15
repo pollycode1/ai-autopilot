@@ -160,7 +160,8 @@ function vTask(t) {
     <div class="card" style="margin-top:12px">
       <div class="row"><h2 class="grow" style="margin:0;font-size:20px">${esc(t.title)}</h2><span class="badge s-${esc(t.status)}">${LABEL[t.status]||esc(t.status)}</span></div>
       ${t.detail ? `<p style="white-space:pre-wrap">${esc(t.detail)}</p>` : ""}
-      <p class="mute">ผลงานอยู่ใน repo โฟลเดอร์ <a href="https://github.com/${esc(S.owner)}/${esc(S.repo)}/tree/${esc(S.branch||"main")}/workspace/${esc(t.id)}" target="_blank" rel="noopener">workspace/${esc(t.id)}</a></p>
+      <div class="row"><a class="btn" href="https://${esc(S.owner)}.github.io/${esc(S.repo)}/workspace/${esc(t.id)}/" target="_blank" rel="noopener">🌐 เปิดดูผลงาน</a>
+      <a class="btn" href="https://github.com/${esc(S.owner)}/${esc(S.repo)}/tree/${esc(S.branch||"main")}/workspace/${esc(t.id)}" target="_blank" rel="noopener">📁 ไฟล์ทั้งหมด</a></div>
     </div>
     <div class="card"><b>แผนที่ AI วิเคราะห์</b>
       ${(t.plan||[]).length ? t.plan.map((s,i) => `<div class="step">${s.done?"✅":"⬜"} <span>${i+1}. ${esc(s.text)}</span></div>`).join("") : `<p class="mute">AI จะวิเคราะห์และแตกเป็นขั้นตอนเมื่อเริ่มทำงานนี้</p>`}
