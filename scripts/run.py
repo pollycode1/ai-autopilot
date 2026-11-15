@@ -5,7 +5,29 @@ from zoneinfo import ZoneInfo
 sys.path.insert(0, os.path.dirname(__file__))
 from tasklib import ROOT, load, save, find, now, merge
 
-LIMIT_RE = re.compile(r"usage limit|rate[ _-]?limit|limit reached|hit your limit|\b429\b|overloaded|quota|credit balance|resets? at|try again later", re.I)
+LIMIT_RE = re.compile(r"usage limit|session limit|weekly limit|rate[ _-]?limit|limit reached|hit your .{0,20}limit|\b429\b|overloaded|quota|credit balance|\bresets?\b|try again later", re.I)
+MAX_WAIT_MIN = int(os.environ.get("MAX_LIMIT_WAIT_MINUTES", "120"))  # รอ limit รีเซ็ตในรอบเดียวกันได้นานสุดกี่นาที
+
+def reset_time(text):
+    """อ่านเวลาที่ limit จะรีเซ็ตจากข้อความของ Claude (คืนค่า datetime UTC หรือ None)"""
+    m = re.search(r"\|(\d{10})\b", text)
+    if m:
+        return datetime.datetime.fromtimestamp(int(m.group(1)), datetime.timezone.utc)
+    m = re.search(r"resets?\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:\(([^)]+)\))?", text, re.I)
+    if not m:
+        return None
+    h, mi, ap, tzname = int(m.group(1)), int(m.group(2) or 0), (m.group(3) or "").lower(), m.group(4) or "UTC"
+    if ap == "pm" and h < 12: h += 12
+    if ap == "am" and h == 12: h = 0
+    try:
+        tz = ZoneInfo(tzname.strip())
+    except Exception:
+        tz = datetime.timezone.utc
+    now_ = datetime.datetime.now(tz)
+    t = now_.replace(hour=h, minute=mi, second=0, microsecond=0)
+    if t <= now_:
+        t += datetime.timedelta(days=1)
+    return t.astimezone(datetime.timezone.utc)
 BUDGET_MIN = int(os.environ.get("RUN_BUDGET_MINUTES", "300"))   # เวลาสูงสุดต่อรอบ
 SESSION_MIN = int(os.environ.get("SESSION_MINUTES", "45"))       # เวลาต่อการเรียก AI หนึ่งครั้ง
 FORCE = os.environ.get("FORCE_RUN", "").lower() in ("1", "true", "yes")
@@ -106,7 +128,18 @@ def main():
         print(out[-3000:], flush=True)
         if code != 0 and LIMIT_RE.search(out):
             line = next((l for l in out.splitlines() if LIMIT_RE.search(l)), "")[:200]
-            add_log(tid, f"⏸ ติด limit ของ Claude — พักไว้ก่อน แล้วจะทำต่ออัตโนมัติเมื่อ limit รีเซ็ต ({line})")
+            rt = reset_time(out)
+            wait = (rt - datetime.datetime.now(datetime.timezone.utc)).total_seconds() / 60 + 2 if rt else None
+            budget_left = BUDGET_MIN - (time.time() - start) / 60
+            win_left = budget_left if FORCE else min(budget_left, window_minutes_left(cfg))
+            if wait is not None and 0 < wait <= MAX_WAIT_MIN and wait + 10 < win_left:
+                local = rt.astimezone(ZoneInfo(cfg.get("timezone", "Asia/Bangkok"))).strftime("%H:%M")
+                add_log(tid, f"⏸ ติด limit ของ Claude — รอให้รีเซ็ตตอน {local} แล้วจะทำต่อทันที ({line})")
+                sync("autopilot: รอ limit รีเซ็ต")
+                time.sleep(wait * 60)
+                tried[tid] -= 1
+                continue
+            add_log(tid, f"⏸ ติด limit ของ Claude — พักไว้ก่อน แล้วจะทำต่ออัตโนมัติในรอบถัดไปหลัง limit รีเซ็ต ({line})")
             sync("autopilot: พักเพราะติด limit"); return 0
         if code == 124:
             add_log(tid, "⌛ หมดเวลาของรอบย่อย — จะทำต่อจากเดิม")
