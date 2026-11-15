@@ -92,7 +92,11 @@ function renderCompare() {
 }
 
 function approxReturnMidpoint(inv) {
-  const matches = inv.expectedReturn.match(/-?\d+(\.\d+)?/g);
+  // ใช้เฉพาะประโยคหลักก่อนคำว่า "แต่" (ตัดทิ้งส่วนขยายเรื่องความผันผวน/สถานการณ์เลวร้าย เช่น "บางปีอาจ -30%")
+  const primary = inv.expectedReturn.split("แต่")[0];
+  // แทนที่ขีด "-" ที่ใช้บอกช่วงตัวเลข (เช่น "6-10") ด้วยช่องว่าง ไม่ให้ regex ตีความเป็นเครื่องหมายลบ
+  const cleaned = primary.replace(/(\d)-(\d)/g, "$1 $2");
+  const matches = cleaned.match(/-?\d+(\.\d+)?/g);
   if (!matches) return inv.riskScore * 2;
   const nums = matches.map(Number).filter((n) => Math.abs(n) <= 100);
   if (!nums.length) return inv.riskScore * 2;
