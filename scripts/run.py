@@ -1,0 +1,119 @@
+#!/usr/bin/env python3
+"""ตัวรัน: ทำงานเฉพาะในช่วงเวลาที่ตั้งไว้, ทีละงาน, หยุดพักเมื่อติด limit แล้วบันทึกลง git"""
+import json, os, re, subprocess, sys, time, datetime, pathlib
+from zoneinfo import ZoneInfo
+sys.path.insert(0, os.path.dirname(__file__))
+from tasklib import ROOT, load, save, find, now, merge
+
+LIMIT_RE = re.compile(r"usage limit|rate[ _-]?limit|limit reached|hit your limit|\b429\b|overloaded|quota|credit balance|resets? at|try again later", re.I)
+BUDGET_MIN = int(os.environ.get("RUN_BUDGET_MINUTES", "300"))   # เวลาสูงสุดต่อรอบ
+SESSION_MIN = int(os.environ.get("SESSION_MINUTES", "45"))       # เวลาต่อการเรียก AI หนึ่งครั้ง
+FORCE = os.environ.get("FORCE_RUN", "").lower() in ("1", "true", "yes")
+CLAUDE = os.environ.get("CLAUDE_BIN", "claude")
+os.chdir(ROOT)
+
+def sh(*cmd, check=True):
+    return subprocess.run(cmd, check=check, text=True, capture_output=True)
+
+def window_minutes_left(cfg, at=None):
+    """คืนจำนวนนาทีที่เหลือในช่วงเวลาทำงานปัจจุบัน หรือ 0 ถ้าอยู่นอกช่วง (days: 0=อาทิตย์ ... 6=เสาร์)"""
+    tz = ZoneInfo(cfg.get("timezone", "Asia/Bangkok"))
+    at = at or datetime.datetime.now(tz)
+    best = 0
+    for w in cfg.get("windows", []):
+        days = set(w.get("days", range(7)))
+        sh_, sm = map(int, w["start"].split(":")); eh, em = map(int, w["end"].split(":"))
+        for back in (0, 1):  # ช่วงที่เริ่มวันนี้ หรือเริ่มเมื่อวาน (ข้ามเที่ยงคืน)
+            d = (at - datetime.timedelta(days=back)).date()
+            if (d.isoweekday() % 7) not in days:
+                continue
+            s = datetime.datetime(d.year, d.month, d.day, sh_, sm, tzinfo=tz)
+            e = datetime.datetime(d.year, d.month, d.day, eh, em, tzinfo=tz)
+            if e <= s:
+                e += datetime.timedelta(days=1)
+            if s <= at < e:
+                best = max(best, int((e - at).total_seconds() // 60))
+    return best
+
+def next_task():
+    data = load()
+    live = [t for t in data["tasks"] if not t.get("deleted") and t.get("status", "todo") not in ("done", "blocked")]
+    rank = {"testing": 0, "doing": 1, "planning": 2, "todo": 3}
+    live.sort(key=lambda t: rank.get(t.get("status", "todo"), 3))
+    return live[0] if live else None
+
+def add_log(tid, text):
+    data = load(); t = find(data, tid)
+    t.setdefault("log", []).append({"time": now(), "by": "system", "text": text})
+    t["updated"] = now(); save(data)
+
+def sync(msg):
+    """commit แล้ว push; ถ้า tasks.json ชนกับที่แก้จากแอป ให้รวมข้อมูลอัตโนมัติ"""
+    sh("git", "add", "-A")
+    if sh("git", "diff", "--cached", "--quiet", check=False).returncode != 0:
+        sh("git", "commit", "-q", "-m", msg)
+    branch = sh("git", "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    for attempt in range(5):
+        sh("git", "fetch", "-q", "origin", branch)
+        r = sh("git", "rebase", f"origin/{branch}", check=False)
+        while r.returncode != 0:
+            conflicted = sh("git", "diff", "--name-only", "--diff-filter=U").stdout.split()
+            if conflicted != ["tasks.json"]:
+                sh("git", "rebase", "--abort", check=False)
+                raise SystemExit(f"รวมไฟล์ไม่ได้: {conflicted}")
+            ours = json.loads(sh("git", "show", ":2:tasks.json").stdout)
+            theirs = json.loads(sh("git", "show", ":3:tasks.json").stdout)
+            save(merge(ours, theirs))
+            sh("git", "add", "tasks.json")
+            r = subprocess.run(["git", "-c", "core.editor=true", "rebase", "--continue"], text=True, capture_output=True)
+        if sh("git", "push", "-q", "origin", f"HEAD:{branch}", check=False).returncode == 0:
+            return
+        time.sleep(5 * (attempt + 1))
+    raise SystemExit("push ไม่สำเร็จ")
+
+def main():
+    start = time.time()
+    cfg = json.loads((ROOT / "config.json").read_text(encoding="utf-8"))
+    if not cfg.get("enabled", True) and not FORCE:
+        print("ระบบถูกปิดไว้ในแอป"); return 0
+    tried = {}
+    while True:
+        used = (time.time() - start) / 60
+        left = BUDGET_MIN - used
+        if not FORCE:
+            left = min(left, window_minutes_left(cfg))
+        if left < 5:
+            print("อยู่นอกช่วงเวลาทำงาน หรือหมดเวลารอบนี้"); return 0
+        task = next_task()
+        if not task:
+            print("✅ ไม่มีงานค้าง"); return 0
+        tid = task["id"]
+        tried[tid] = tried.get(tid, 0) + 1
+        if tried[tid] > 3:
+            add_log(tid, "รอบนี้ทำงานนี้ไป 3 ครั้งแล้วยังไม่เสร็จ จะลองใหม่ในรอบถัดไป")
+            sync(f"autopilot: พักงาน {tid}"); return 0
+        minutes = int(min(SESSION_MIN, left - 2))
+        print(f"▶ ทำงาน {tid}: {task.get('title')} ({minutes} นาที)", flush=True)
+        prompt = (ROOT / "prompts/agent.md").read_text(encoding="utf-8") \
+            .replace("{TASK_ID}", tid).replace("{MINUTES}", str(minutes))
+        try:
+            p = subprocess.run([CLAUDE, "-p", prompt, "--dangerously-skip-permissions",
+                                "--max-turns", os.environ.get("MAX_TURNS", "150")],
+                               text=True, capture_output=True, timeout=minutes * 60)
+            out, code = (p.stdout or "") + (p.stderr or ""), p.returncode
+        except subprocess.TimeoutExpired:
+            out, code = "timeout", 124
+        print(out[-3000:], flush=True)
+        if code != 0 and LIMIT_RE.search(out):
+            line = next((l for l in out.splitlines() if LIMIT_RE.search(l)), "")[:200]
+            add_log(tid, f"⏸ ติด limit ของ Claude — พักไว้ก่อน แล้วจะทำต่ออัตโนมัติเมื่อ limit รีเซ็ต ({line})")
+            sync("autopilot: พักเพราะติด limit"); return 0
+        if code == 124:
+            add_log(tid, "⌛ หมดเวลาของรอบย่อย — จะทำต่อจากเดิม")
+        elif code != 0:
+            add_log(tid, f"⚠️ เกิดข้อผิดพลาด (exit {code}): {out.strip()[-300:]}")
+            sync("autopilot: error"); return 1
+        sync(f"autopilot: {task.get('title', tid)[:50]}")
+
+if __name__ == "__main__":
+    sys.exit(main())

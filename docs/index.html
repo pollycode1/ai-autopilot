@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<title>AI Autopilot</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{--bg:#f8fafc;--card:#fff;--ink:#0f172a;--mute:#64748b;--line:#e2e8f0;--acc:#0284c7;--accink:#fff;--ok:#16a34a;--warn:#d97706;--bad:#dc2626}
+@media (prefers-color-scheme:dark){:root{--bg:#0b1220;--card:#131c2e;--ink:#e2e8f0;--mute:#94a3b8;--line:#243047;--acc:#38bdf8;--accink:#0b1220}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,"Noto Sans Thai",sans-serif;padding-bottom:72px}
+header{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--line);padding:12px 16px;display:flex;align-items:center;gap:8px;z-index:5}
+header h1{font-size:18px;margin:0;flex:1}
+main{max-width:720px;margin:0 auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+button,.btn{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:8px 14px;cursor:pointer}
+button.primary{background:var(--acc);color:var(--accink);border-color:var(--acc)}
+button.danger{color:var(--bad)}
+button:disabled{opacity:.5}
+input,textarea,select{font:inherit;width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
+textarea{min-height:90px;resize:vertical}
+label{display:block;font-size:14px;color:var(--mute);margin:10px 0 4px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.grow{flex:1}
+.badge{font-size:12px;padding:2px 8px;border-radius:99px;border:1px solid currentColor;white-space:nowrap}
+.s-todo{color:var(--mute)}.s-planning,.s-doing,.s-testing{color:var(--acc)}.s-done{color:var(--ok)}.s-blocked{color:var(--warn)}
+.task{cursor:pointer}
+.task h3{margin:0;font-size:16px}
+.mute{color:var(--mute);font-size:14px}
+.step{display:flex;gap:8px;padding:4px 0}
+.log{border-left:3px solid var(--line);padding:4px 10px;margin:8px 0;white-space:pre-wrap;word-break:break-word}
+.log.user{border-color:var(--acc)}.log.system{border-color:var(--warn)}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;border:0;border-radius:0;padding:14px 4px;background:none}
+nav button.on{color:var(--acc);font-weight:600}
+.day{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:50%;border:1px solid var(--line);cursor:pointer;user-select:none}
+.day.on{background:var(--acc);color:var(--accink);border-color:var(--acc)}
+#toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 16px;border-radius:10px;display:none;z-index:10;max-width:90vw}
+.progress{height:6px;background:var(--line);border-radius:99px;overflow:hidden;margin-top:8px}
+.progress>i{display:block;height:100%;background:var(--acc)}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<header><h1>🤖 AI Autopilot</h1><span id="sync" class="mute"></span><button id="refresh" title="รีเฟรช">⟳</button></header>
+<main id="view"></main>
+<nav id="nav">
+  <button data-tab="tasks" class="on">📋 งาน</button>
+  <button data-tab="schedule">⏰ ช่วงเวลา</button>
+  <button data-tab="runs">⚙️ สถานะ</button>
+  <button data-tab="settings">🔑 ตั้งค่า</button>
+</nav>
+<div id="toast"></div>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const LABEL = {todo:"รอทำ",planning:"กำลังวิเคราะห์",doing:"กำลังทำ",testing:"กำลังทดสอบ",done:"เสร็จแล้ว",blocked:"ต้องการคุณ"};
+const DAYS = ["อา","จ","อ","พ","พฤ","ศ","ส"];
+const nowIso = () => new Date().toISOString().replace(/\.\d+Z$/, "Z");
+const fmt = iso => iso ? new Date(iso).toLocaleString("th-TH", {dateStyle:"short", timeStyle:"short"}) : "";
+
+let S = {}; try { S = JSON.parse(localStorage.getItem("ap-settings") || "{}"); } catch {}
+let state = { tab: "tasks", tasks: null, config: null, open: null };
+
+function toast(m){ const t=$("#toast"); t.textContent=m; t.style.display="block"; clearTimeout(toast.h); toast.h=setTimeout(()=>t.style.display="none",3000); }
+
+// ---------- GitHub ----------
+const b64e = s => { const b = new TextEncoder().encode(s); let r=""; for (let i=0;i<b.length;i+=0x8000) r+=String.fromCharCode(...b.subarray(i,i+0x8000)); return btoa(r); };
+const b64d = s => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\n/g,"")), c => c.charCodeAt(0)));
+async function gh(path, opt = {}) {
+  const r = await fetch(`https://api.github.com/repos/${S.owner}/${S.repo}${path}`, {
+    ...opt, cache: "no-store",
+    headers: { Authorization: `Bearer ${S.token}`, Accept: "application/vnd.github+json", ...(opt.headers||{}) }
+  });
+  if (!r.ok) { const e = new Error(`GitHub ${r.status}`); e.status = r.status; try { e.detail = (await r.json()).message; } catch {} throw e; }
+  return r.status === 204 ? null : r.json();
+}
+async function getFile(name) {
+  const j = await gh(`/contents/${name}?ref=${S.branch || "main"}`);
+  return { data: JSON.parse(b64d(j.content)), sha: j.sha };
+}
+// แก้ไฟล์แบบปลอดภัย: ดึงล่าสุด → แก้ → บันทึก ถ้าชนกับ AI ก็ลองใหม่
+async function mutate(name, fn, msg) {
+  for (let i = 0; i < 4; i++) {
+    const { data, sha } = await getFile(name);
+    fn(data);
+    try {
+      await gh(`/contents/${name}`, { method: "PUT", body: JSON.stringify({ message: msg, sha, branch: S.branch || "main",
+        content: b64e(JSON.stringify(data, null, 2) + "\n") }) });
+      return data;
+    } catch (e) { if (e.status !== 409 && e.status !== 422) throw e; await new Promise(r => setTimeout(r, 800 * (i+1))); }
+  }
+  throw new Error("บันทึกไม่สำเร็จ ลองใหม่อีกครั้ง");
+}
+
+async function load(quiet) {
+  if (!S.token) return render();
+  $("#sync").textContent = "กำลังซิงค์…";
+  try {
+    const [t, c] = await Promise.all([getFile("tasks.json"), getFile("config.json")]);
+    state.tasks = t.data.tasks.filter(x => !x.deleted); state.config = c.data;
+    $("#sync").textContent = "ซิงค์ " + new Date().toLocaleTimeString("th-TH", {timeStyle:"short"});
+  } catch (e) {
+    $("#sync").textContent = "ซิงค์ไม่ได้";
+    if (!quiet) toast(e.status === 401 ? "Token ไม่ถูกต้องหรือหมดอายุ" : e.status === 404 ? "ไม่พบ repo หรือไฟล์ — เช็กหน้าตั้งค่า" : "เชื่อมต่อไม่ได้: " + e.message);
+  }
+  render();
+}
+
+// ---------- Views ----------
+function render() {
+  document.querySelectorAll("nav button").forEach(b => b.classList.toggle("on", b.dataset.tab === state.tab));
+  if (!S.token && state.tab !== "settings") state.tab = "settings";
+  ({ tasks: vTasks, schedule: vSchedule, runs: vRuns, settings: vSettings })[state.tab]();
+}
+
+function vTasks() {
+  const v = $("#view");
+  if (state.open) return vTask(state.tasks?.find(t => t.id === state.open));
+  if (!state.tasks) { v.innerHTML = `<p class="mute">กำลังโหลด…</p>`; return; }
+  const order = {blocked:0,testing:1,doing:1,planning:1,todo:2,done:3};
+  const list = [...state.tasks].sort((a,b) => (order[a.status]??2) - (order[b.status]??2));
+  v.innerHTML = `
+    <div class="card">
+      <label for="nt">อยากให้ AI ทำอะไร</label>
+      <input id="nt" placeholder="เช่น ทำเว็บแนะนำร้านกาแฟ 1 หน้า">
+      <label for="nd">รายละเอียด (ไม่บังคับ)</label>
+      <textarea id="nd" placeholder="เป้าหมาย ความต้องการ ข้อจำกัด ตัวอย่างที่ชอบ…"></textarea>
+      <div class="row" style="margin-top:10px"><span class="grow"></span><button class="primary" id="add">+ เพิ่มงาน</button></div>
+    </div>
+    ${list.length ? "" : `<p class="mute">ยังไม่มีงาน เพิ่มงานแรกด้านบนได้เลย</p>`}
+    ${list.map(t => { const n=(t.plan||[]).length, d=(t.plan||[]).filter(s=>s.done).length; return `
+      <div class="card task" data-id="${esc(t.id)}">
+        <div class="row"><h3 class="grow">${esc(t.title)}</h3><span class="badge s-${esc(t.status)}">${LABEL[t.status]||esc(t.status)}</span></div>
+        <div class="mute">${n ? `${d}/${n} ขั้นตอน · ` : ""}อัปเดต ${fmt(t.updated)}</div>
+        ${n ? `<div class="progress"><i style="width:${Math.round(d/n*100)}%"></i></div>` : ""}
+      </div>`; }).join("")}`;
+  $("#add").onclick = async () => {
+    const title = $("#nt").value.trim(); if (!title) return toast("ใส่ชื่องานก่อน");
+    const detail = $("#nd").value.trim(); $("#add").disabled = true;
+    try {
+      const id = "t" + Date.now().toString(36);
+      const d = await mutate("tasks.json", x => x.tasks.push({ id, title, detail, status:"todo", plan:[], log:[], created: nowIso(), updated: nowIso() }), `app: เพิ่มงาน ${title}`);
+      state.tasks = d.tasks.filter(x => !x.deleted); toast("เพิ่มงานแล้ว AI จะเริ่มทำในช่วงเวลาที่ตั้งไว้");
+    } catch (e) { toast(e.message); }
+    render();
+  };
+  document.querySelectorAll(".task").forEach(el => el.onclick = () => { state.open = el.dataset.id; render(); });
+}
+
+function vTask(t) {
+  const v = $("#view");
+  if (!t) { state.open = null; return vTasks(); }
+  v.innerHTML = `
+    <button id="back">← กลับ</button>
+    <div class="card" style="margin-top:12px">
+      <div class="row"><h2 class="grow" style="margin:0;font-size:20px">${esc(t.title)}</h2><span class="badge s-${esc(t.status)}">${LABEL[t.status]||esc(t.status)}</span></div>
+      ${t.detail ? `<p style="white-space:pre-wrap">${esc(t.detail)}</p>` : ""}
+      <p class="mute">ผลงานอยู่ใน repo โฟลเดอร์ <a href="https://github.com/${esc(S.owner)}/${esc(S.repo)}/tree/${esc(S.branch||"main")}/workspace/${esc(t.id)}" target="_blank" rel="noopener">workspace/${esc(t.id)}</a></p>
+    </div>
+    <div class="card"><b>แผนที่ AI วิเคราะห์</b>
+      ${(t.plan||[]).length ? t.plan.map((s,i) => `<div class="step">${s.done?"✅":"⬜"} <span>${i+1}. ${esc(s.text)}</span></div>`).join("") : `<p class="mute">AI จะวิเคราะห์และแตกเป็นขั้นตอนเมื่อเริ่มทำงานนี้</p>`}
+    </div>
+    <div class="card"><b>ส่งข้อความถึง AI</b>
+      <textarea id="msg" placeholder="${t.status==="blocked" ? "ตอบสิ่งที่ AI ต้องการ แล้ว AI จะทำต่อ" : "เพิ่มคำสั่ง แก้ไข หรือให้ข้อมูลเพิ่ม"}"></textarea>
+      <div class="row" style="margin-top:8px"><span class="grow"></span><button class="primary" id="send">ส่ง</button></div>
+    </div>
+    <div class="card"><b>บันทึกการทำงาน</b>
+      ${(t.log||[]).length ? [...t.log].reverse().map(l => `<div class="log ${esc(l.by)}"><div class="mute">${l.by==="user"?"คุณ":l.by==="system"?"ระบบ":"AI"} · ${fmt(l.time)}</div>${esc(l.text)}</div>`).join("") : `<p class="mute">ยังไม่มีบันทึก</p>`}
+    </div>
+    <div class="row">
+      ${t.status!=="todo" ? `<button id="redo">↺ ให้ทำใหม่ตั้งแต่ต้น</button>` : ""}
+      <span class="grow"></span><button class="danger" id="del">ลบงาน</button>
+    </div>`;
+  const upd = (fn, msg, ok) => mutate("tasks.json", x => { const it = x.tasks.find(y => y.id === t.id); fn(it); it.updated = nowIso(); }, msg)
+    .then(d => { state.tasks = d.tasks.filter(x => !x.deleted); toast(ok); render(); }).catch(e => toast(e.message));
+  $("#back").onclick = () => { state.open = null; render(); };
+  $("#send").onclick = () => { const m = $("#msg").value.trim(); if (!m) return;
+    upd(it => { (it.log ||= []).push({ time: nowIso(), by: "user", text: m }); if (it.status === "blocked" || it.status === "done") it.status = "doing"; }, "app: ข้อความถึง AI", "ส่งแล้ว"); };
+  $("#redo") && ($("#redo").onclick = () => confirmBtn($("#redo"), () => upd(it => { it.status = "todo"; it.plan = []; (it.log ||= []).push({ time: nowIso(), by: "user", text: "ขอให้เริ่มทำใหม่ตั้งแต่ต้น" }); }, "app: เริ่มใหม่", "ตั้งให้ทำใหม่แล้ว")));
+  $("#del").onclick = () => confirmBtn($("#del"), () => { state.open = null; upd(it => { it.deleted = true; }, "app: ลบงาน", "ลบแล้ว"); });
+}
+function confirmBtn(b, fn) { if (b.dataset.c) return fn(); b.dataset.c = 1; const o = b.textContent; b.textContent = "แตะอีกครั้งเพื่อยืนยัน"; setTimeout(() => { b.textContent = o; delete b.dataset.c; }, 3000); }
+
+function vSchedule() {
+  const v = $("#view"), c = state.config;
+  if (!c) { v.innerHTML = `<p class="mute">กำลังโหลด…</p>`; return; }
+  const draft = state.draft ||= JSON.parse(JSON.stringify(c));
+  v.innerHTML = `
+    <div class="card">
+      <div class="row"><b class="grow">ให้ AI ทำงานอัตโนมัติ</b>
+        <label class="row" style="margin:0;color:var(--ink)"><input type="checkbox" id="en" style="width:22px;height:22px" ${draft.enabled!==false?"checked":""}> เปิด</label></div>
+      <p class="mute">AI จะทำงานเฉพาะในช่วงเวลาด้านล่าง (เวลาไทย) ระบบเช็กทุกชั่วโมง ถ้าติด limit จะพักแล้วกลับมาทำต่อเอง</p>
+    </div>
+    ${draft.windows.map((w,i) => `
+      <div class="card">
+        <div class="row"><b class="grow">ช่วงที่ ${i+1}</b><button class="danger" data-rm="${i}">ลบ</button></div>
+        <div class="row" style="margin-top:8px">${DAYS.map((d,k) => `<span class="day ${w.days.includes(k)?"on":""}" data-w="${i}" data-d="${k}">${d}</span>`).join("")}</div>
+        <div class="row" style="margin-top:8px">
+          <div class="grow"><label>เริ่ม</label><input type="time" value="${esc(w.start)}" data-w="${i}" data-k="start"></div>
+          <div class="grow"><label>ถึง</label><input type="time" value="${esc(w.end)}" data-w="${i}" data-k="end"></div>
+        </div>
+        ${w.end <= w.start ? `<p class="mute">ข้ามเที่ยงคืน: เริ่มวันที่เลือก ไปจบวันถัดไป</p>` : ""}
+      </div>`).join("")}
+    <div class="row"><button id="addw">+ เพิ่มช่วงเวลา</button><span class="grow"></span><button class="primary" id="savew">บันทึก</button></div>`;
+  $("#en").onchange = e => draft.enabled = e.target.checked;
+  document.querySelectorAll(".day").forEach(el => el.onclick = () => { const w = draft.windows[el.dataset.w], d = +el.dataset.d;
+    w.days = w.days.includes(d) ? w.days.filter(x => x !== d) : [...w.days, d].sort(); render(); });
+  document.querySelectorAll("input[type=time]").forEach(el => el.onchange = () => { draft.windows[el.dataset.w][el.dataset.k] = el.value; render(); });
+  document.querySelectorAll("[data-rm]").forEach(el => el.onclick = () => { draft.windows.splice(+el.dataset.rm, 1); render(); });
+  $("#addw").onclick = () => { draft.windows.push({ days:[1,2,3,4,5], start:"09:00", end:"17:00" }); render(); };
+  $("#savew").onclick = async () => {
+    try { const d = await mutate("config.json", x => { x.enabled = draft.enabled; x.windows = draft.windows; x.timezone ||= "Asia/Bangkok"; }, "app: ตั้งช่วงเวลา");
+      state.config = d; state.draft = null; toast("บันทึกช่วงเวลาแล้ว"); render(); } catch (e) { toast(e.message); }
+  };
+}
+
+async function vRuns() {
+  const v = $("#view");
+  v.innerHTML = `
+    <div class="card"><b>รันเลยตอนนี้</b>
+      <p class="mute">สั่งให้ AI เริ่มทำงานทันที ไม่ต้องรอช่วงเวลาที่ตั้งไว้ (จะเริ่มภายใน 1–2 นาที)</p>
+      <button class="primary" id="now">▶ เริ่มทำงานตอนนี้</button></div>
+    <div class="card"><b>รอบการทำงานล่าสุด</b><div id="runs" class="mute">กำลังโหลด…</div></div>`;
+  $("#now").onclick = async () => { $("#now").disabled = true;
+    try { await gh(`/actions/workflows/autopilot.yml/dispatches`, { method:"POST", body: JSON.stringify({ ref: S.branch || "main", inputs: { force: true } }) });
+      toast("สั่งแล้ว AI กำลังเริ่มทำงาน"); setTimeout(() => state.tab === "runs" && vRuns(), 5000); }
+    catch (e) { toast(e.status === 403 ? "Token ไม่มีสิทธิ์ Actions (ดูหน้าตั้งค่า)" : e.message); $("#now").disabled = false; } };
+  try {
+    const j = await gh(`/actions/workflows/autopilot.yml/runs?per_page=10`);
+    const st = r => r.status !== "completed" ? "🔄 กำลังทำงาน" : r.conclusion === "success" ? "✅ สำเร็จ" : r.conclusion === "cancelled" ? "⏹ ยกเลิก" : "❌ ล้มเหลว";
+    $("#runs").innerHTML = j.workflow_runs.length ? j.workflow_runs.map(r => `<div class="step"><span class="grow">${st(r)} · ${fmt(r.created_at)}</span><a href="${esc(r.html_url)}" target="_blank" rel="noopener">ดู</a></div>`).join("") : "ยังไม่มีรอบการทำงาน";
+  } catch (e) { $("#runs").textContent = "โหลดไม่ได้: " + (e.detail || e.message); }
+}
+
+function vSettings() {
+  $("#view").innerHTML = `
+    <div class="card"><b>เชื่อมต่อกับ GitHub</b>
+      <p class="mute">ข้อมูลงานเก็บอยู่ใน GitHub repo ของคุณ ทำให้คอมกับมือถือเห็นข้อมูลเดียวกัน Token จะเก็บไว้ในเครื่องนี้เท่านั้น</p>
+      <label>ชื่อบัญชี GitHub (owner)</label><input id="ow" value="${esc(S.owner||"")}" placeholder="เช่น pollycode1" autocapitalize="off">
+      <label>ชื่อ repo</label><input id="rp" value="${esc(S.repo||"")}" placeholder="เช่น ai-autopilot" autocapitalize="off">
+      <label>Branch</label><input id="br" value="${esc(S.branch||"main")}" autocapitalize="off">
+      <label>Personal access token</label><input id="tk" type="password" value="${esc(S.token||"")}" placeholder="github_pat_…">
+      <div class="row" style="margin-top:12px"><button id="out" class="danger">ออกจากระบบ</button><span class="grow"></span><button class="primary" id="sv">บันทึกและเชื่อมต่อ</button></div>
+    </div>
+    <p class="mute">ติดตั้งเป็นแอป: บน Android เปิดใน Chrome → เมนู ⋮ → "เพิ่มลงในหน้าจอหลัก" / บนคอม กดไอคอนติดตั้งท้ายช่อง URL</p>`;
+  $("#sv").onclick = async () => {
+    S = { owner: $("#ow").value.trim(), repo: $("#rp").value.trim(), branch: $("#br").value.trim() || "main", token: $("#tk").value.trim() };
+    try { localStorage.setItem("ap-settings", JSON.stringify(S)); } catch {}
+    state.tab = "tasks"; await load();
+  };
+  $("#out").onclick = () => { try { localStorage.removeItem("ap-settings"); } catch {} S = {}; state.tasks = state.config = null; render(); };
+}
+
+const typing = () => /INPUT|TEXTAREA/.test(document.activeElement?.tagName) && document.activeElement.value;
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => { state.tab = b.dataset.tab; state.open = null; state.draft = null; render(); });
+$("#refresh").onclick = () => load();
+document.addEventListener("visibilitychange", () => { if (!document.hidden && !typing()) load(true); });
+setInterval(() => { if (!document.hidden && state.tab === "tasks" && !typing()) load(true); }, 60000);
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+render(); load(true);
+</script>
+</body>
+</html>

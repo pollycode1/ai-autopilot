@@ -1,0 +1,54 @@
+name: AI Autopilot
+
+on:
+  schedule:
+    - cron: "5 * * * *"      # ตื่นมาเช็กทุกชั่วโมง: ถ้าอยู่ในช่วงเวลาที่ตั้งไว้และมีงาน ก็ทำต่อ
+  workflow_dispatch:         # ปุ่ม "รันเลยตอนนี้" ในแอป
+    inputs:
+      force:
+        description: "รันทันทีโดยไม่สนช่วงเวลา"
+        type: boolean
+        default: false
+
+concurrency:
+  group: ai-autopilot        # รันทีละรอบ ไม่ซ้อนกัน
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  work:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+      - name: เช็กว่าต้องทำงานไหม
+        id: check
+        env:
+          FORCE_RUN: ${{ inputs.force }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os, sys
+          sys.path.insert(0, "scripts")
+          from run import window_minutes_left, next_task
+          cfg = json.load(open("config.json"))
+          force = os.environ.get("FORCE_RUN") == "true"
+          ok = next_task() and (force or (cfg.get("enabled", True) and window_minutes_left(cfg) >= 5))
+          print("go=" + ("yes" if ok else "no"))
+          PY
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.go == 'yes'
+        with: { node-version: 20 }
+      - name: ติดตั้ง Claude Code
+        if: steps.check.outputs.go == 'yes'
+        run: npm install -g @anthropic-ai/claude-code
+      - name: ทำงานตามรายการ
+        if: steps.check.outputs.go == 'yes'
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          FORCE_RUN: ${{ inputs.force }}
+        run: |
+          git config user.name "ai-autopilot"
+          git config user.email "ai-autopilot@users.noreply.github.com"
+          python3 scripts/run.py
