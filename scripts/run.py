@@ -69,6 +69,21 @@ def add_log(tid, text):
     t.setdefault("log", []).append({"time": now(), "by": "system", "text": text})
     t["updated"] = now(); save(data)
 
+def inject_helper():
+    """ใส่ปุ่ม 🔧 (สั่ง AI อัปเดต) ให้ทุกแอปที่เปิดผ่านเว็บ"""
+    url = sh("git", "config", "--get", "remote.origin.url", check=False).stdout.strip()
+    full = os.environ.get("GITHUB_REPOSITORY") or re.sub(r"\.git$", "", re.sub(r".*github\.com[:/]", "", url))
+    if "/" not in full:
+        return
+    owner, repo = full.split("/", 1)
+    for page in (ROOT / "docs/workspace").glob("*/index.html"):
+        h = page.read_text(encoding="utf-8")
+        if "app-helper.js" in h:
+            continue
+        tag = f'<script src="../../app-helper.js" data-app="{page.parent.name}" data-owner="{owner}" data-repo="{repo}"></script>'
+        h = h.replace("</body>", tag + "\n</body>") if "</body>" in h else h + tag
+        page.write_text(h, encoding="utf-8")
+
 def sync(msg):
     """commit แล้ว push; ถ้า tasks.json ชนกับที่แก้จากแอป ให้รวมข้อมูลอัตโนมัติ"""
     # คัดลอกผลงานไปไว้ใน docs/ เพื่อให้เปิดดูผ่านเว็บได้ (GitHub Pages)
@@ -76,6 +91,7 @@ def sync(msg):
         import shutil
         shutil.copytree(ROOT / "workspace", ROOT / "docs/workspace", dirs_exist_ok=True,
                         ignore=shutil.ignore_patterns("node_modules", ".venv", "__pycache__", ".git"))
+        inject_helper()
     sh("git", "add", "-A")
     if sh("git", "diff", "--cached", "--quiet", check=False).returncode != 0:
         sh("git", "commit", "-q", "-m", msg)
