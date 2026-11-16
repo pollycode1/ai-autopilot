@@ -9,6 +9,10 @@ on:
         description: "รันทันทีโดยไม่สนช่วงเวลา"
         type: boolean
         default: false
+      task:
+        description: "ทำเฉพาะงาน id นี้ทันที (เว้นว่าง = ทุกงาน)"
+        type: string
+        default: ""
 
 concurrency:
   group: ai-autopilot        # รันทีละรอบ ไม่ซ้อนกัน
@@ -33,13 +37,14 @@ jobs:
         id: check
         env:
           FORCE_RUN: ${{ inputs.force }}
+          ONLY_TASK: ${{ inputs.task }}
         run: |
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json, os, sys
           sys.path.insert(0, "scripts")
           from run import window_minutes_left, next_task
           cfg = json.load(open("config.json"))
-          force = os.environ.get("FORCE_RUN") == "true"
+          force = os.environ.get("FORCE_RUN") == "true" or bool(os.environ.get("ONLY_TASK"))
           ok = next_task() and (force or (cfg.get("enabled", True) and window_minutes_left(cfg) >= 5))
           print("go=" + ("yes" if ok else "no"))
           PY
@@ -54,6 +59,7 @@ jobs:
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           FORCE_RUN: ${{ inputs.force }}
+          ONLY_TASK: ${{ inputs.task }}
         run: |
           git config user.name "ai-autopilot"
           git config user.email "ai-autopilot@users.noreply.github.com"

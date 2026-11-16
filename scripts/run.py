@@ -30,7 +30,8 @@ def reset_time(text):
     return t.astimezone(datetime.timezone.utc)
 BUDGET_MIN = int(os.environ.get("RUN_BUDGET_MINUTES", "300"))   # เวลาสูงสุดต่อรอบ
 SESSION_MIN = int(os.environ.get("SESSION_MINUTES", "45"))       # เวลาต่อการเรียก AI หนึ่งครั้ง
-FORCE = os.environ.get("FORCE_RUN", "").lower() in ("1", "true", "yes")
+ONLY = os.environ.get("ONLY_TASK", "").strip()                  # ทำเฉพาะงานนี้ทันที (ปุ่ม ▶ ในหน้างาน)
+FORCE = os.environ.get("FORCE_RUN", "").lower() in ("1", "true", "yes") or bool(ONLY)
 CLAUDE = os.environ.get("CLAUDE_BIN", "claude")
 os.chdir(ROOT)
 
@@ -57,9 +58,11 @@ def window_minutes_left(cfg, at=None):
                 best = max(best, int((e - at).total_seconds() // 60))
     return best
 
-def next_task():
+def next_task(only=None):
+    only = ONLY if only is None else only
     data = load()
-    live = [t for t in data["tasks"] if not t.get("deleted") and t.get("status", "todo") not in ("done", "blocked")]
+    live = [t for t in data["tasks"] if not t.get("deleted") and t.get("status", "todo") not in ("done", "blocked")
+            and (not only or t.get("id") == only)]
     rank = {"testing": 0, "doing": 1, "planning": 2, "todo": 3}
     live.sort(key=lambda t: rank.get(t.get("status", "todo"), 3))
     return live[0] if live else None

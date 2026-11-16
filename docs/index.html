@@ -179,6 +179,7 @@ function vTask(t) {
       ${(t.log||[]).length ? [...t.log].reverse().map(l => `<div class="log ${esc(l.by)}"><div class="mute">${l.by==="user"?"คุณ":l.by==="system"?"ระบบ":"AI"} · ${fmt(l.time)}</div>${esc(l.text)}</div>`).join("") : `<p class="mute">ยังไม่มีบันทึก</p>`}
     </div>
     <div class="row">
+      ${!["done"].includes(t.status) ? `<button class="primary" id="runone">▶ ทำงานนี้เลย</button>` : ""}
       ${t.status!=="todo" ? `<button id="redo">↺ ให้ทำใหม่ตั้งแต่ต้น</button>` : ""}
       <span class="grow"></span><button class="danger" id="del">ลบงาน</button>
     </div>`;
@@ -191,6 +192,12 @@ function vTask(t) {
   $("#send").onclick = () => { const m = $("#msg").value.trim(); if (!m) return;
     upd(it => { (it.log ||= []).push({ time: nowIso(), by: "user", text: m }); if (it.status === "blocked" || it.status === "done") it.status = "doing"; }, "app: ข้อความถึง AI", "ส่งแล้ว"); };
   $("#redo") && ($("#redo").onclick = () => confirmBtn($("#redo"), () => upd(it => { it.status = "todo"; it.plan = []; (it.log ||= []).push({ time: nowIso(), by: "user", text: "ขอให้เริ่มทำใหม่ตั้งแต่ต้น" }); }, "app: เริ่มใหม่", "ตั้งให้ทำใหม่แล้ว")));
+  $("#runone") && ($("#runone").onclick = async () => { $("#runone").disabled = true;
+    try {
+      if (t.status === "blocked") await upd(it => { it.status = "doing"; }, "app: ทำต่อ", "");
+      await gh(`/actions/workflows/autopilot.yml/dispatches`, { method: "POST", body: JSON.stringify({ ref: S.branch || "main", inputs: { force: true, task: t.id } }) });
+      toast("เริ่มทำงานนี้แล้ว (งานอื่นจะรอช่วงเวลาที่ตั้งไว้)");
+    } catch (e) { toast(e.status === 403 ? "Token ไม่มีสิทธิ์ Actions" : e.message); $("#runone").disabled = false; } });
   $("#del").onclick = () => confirmBtn($("#del"), () => { state.open = null; upd(it => { it.deleted = true; }, "app: ลบงาน", "ลบแล้ว"); });
 }
 function confirmBtn(b, fn) { if (b.dataset.c) return fn(); b.dataset.c = 1; const o = b.textContent; b.textContent = "แตะอีกครั้งเพื่อยืนยัน"; setTimeout(() => { b.textContent = o; delete b.dataset.c; }, 3000); }
