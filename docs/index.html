@@ -35,7 +35,7 @@ label{display:block;font-size:14px;color:var(--mute);margin:10px 0 4px}
 .log{border-left:3px solid var(--line);padding:4px 10px;margin:8px 0;white-space:pre-wrap;word-break:break-word}
 .log.user{border-color:var(--acc)}.log.system{border-color:var(--warn)}
 nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
-nav button{flex:1;border:0;border-radius:0;padding:14px 4px;background:none}
+nav button{flex:1;border:0;border-radius:0;padding:14px 2px;background:none;font-size:14px;white-space:nowrap}
 nav button.on{color:var(--acc);font-weight:600}
 .day{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:50%;border:1px solid var(--line);cursor:pointer;user-select:none}
 .day.on{background:var(--acc);color:var(--accink);border-color:var(--acc)}
@@ -50,7 +50,8 @@ nav button.on{color:var(--acc);font-weight:600}
 <main id="view"></main>
 <nav id="nav">
   <button data-tab="tasks" class="on">📋 งาน</button>
-  <button data-tab="schedule">⏰ ช่วงเวลา</button>
+  <button data-tab="chat">💬 ถาม</button>
+  <button data-tab="schedule">⏰ เวลา</button>
   <button data-tab="runs">⚙️ สถานะ</button>
   <button data-tab="settings">🔑 ตั้งค่า</button>
 </nav>
@@ -79,14 +80,16 @@ async function gh(path, opt = {}) {
   if (!r.ok) { const e = new Error(`GitHub ${r.status}`); e.status = r.status; try { e.detail = (await r.json()).message; } catch {} throw e; }
   return r.status === 204 ? null : r.json();
 }
-async function getFile(name) {
-  const j = await gh(`/contents/${name}?ref=${S.branch || "main"}`);
+async function getFile(name, dflt) {
+  let j;
+  try { j = await gh(`/contents/${name}?ref=${S.branch || "main"}`); }
+  catch (e) { if (e.status === 404 && dflt) return { data: dflt(), sha: undefined }; throw e; }
   return { data: JSON.parse(b64d(j.content)), sha: j.sha };
 }
 // แก้ไฟล์แบบปลอดภัย: ดึงล่าสุด → แก้ → บันทึก ถ้าชนกับ AI ก็ลองใหม่
-async function mutate(name, fn, msg) {
+async function mutate(name, fn, msg, dflt) {
   for (let i = 0; i < 4; i++) {
-    const { data, sha } = await getFile(name);
+    const { data, sha } = await getFile(name, dflt);
     fn(data);
     try {
       await gh(`/contents/${name}`, { method: "PUT", body: JSON.stringify({ message: msg, sha, branch: S.branch || "main",
@@ -115,7 +118,7 @@ async function load(quiet) {
 function render() {
   document.querySelectorAll("nav button").forEach(b => b.classList.toggle("on", b.dataset.tab === state.tab));
   if (!S.token && state.tab !== "settings") state.tab = "settings";
-  ({ tasks: vTasks, schedule: vSchedule, runs: vRuns, settings: vSettings })[state.tab]();
+  ({ tasks: vTasks, chat: vChat, schedule: vSchedule, runs: vRuns, settings: vSettings })[state.tab]();
 }
 
 function vTasks() {
@@ -161,6 +164,7 @@ function vTask(t) {
       <div class="row"><h2 class="grow" style="margin:0;font-size:20px">${esc(t.title)}</h2><span class="badge s-${esc(t.status)}">${LABEL[t.status]||esc(t.status)}</span></div>
       ${t.detail ? `<p style="white-space:pre-wrap">${esc(t.detail)}</p>` : ""}
       <div class="row"><a class="btn" href="https://${esc(S.owner)}.github.io/${esc(S.repo)}/workspace/${esc(t.id)}/" target="_blank" rel="noopener">🌐 เปิดดูผลงาน</a>
+      <button id="askt">💬 ถามเกี่ยวกับงานนี้</button>
       <a class="btn" href="https://github.com/${esc(S.owner)}/${esc(S.repo)}/releases/download/apps/${esc(t.id)}.apk">📱 ดาวน์โหลด APK</a>
       <a class="btn" href="https://github.com/${esc(S.owner)}/${esc(S.repo)}/tree/${esc(S.branch||"main")}/workspace/${esc(t.id)}" target="_blank" rel="noopener">📁 ไฟล์ทั้งหมด</a></div>
     </div>
@@ -181,12 +185,56 @@ function vTask(t) {
   const upd = (fn, msg, ok) => mutate("tasks.json", x => { const it = x.tasks.find(y => y.id === t.id); fn(it); it.updated = nowIso(); }, msg)
     .then(d => { state.tasks = d.tasks.filter(x => !x.deleted); toast(ok); render(); }).catch(e => toast(e.message));
   $("#back").onclick = () => { state.open = null; render(); };
+  $("#askt").onclick = () => { state.chatScope = t.id; state.open = null; state.tab = "chat"; render(); };
   $("#send").onclick = () => { const m = $("#msg").value.trim(); if (!m) return;
     upd(it => { (it.log ||= []).push({ time: nowIso(), by: "user", text: m }); if (it.status === "blocked" || it.status === "done") it.status = "doing"; }, "app: ข้อความถึง AI", "ส่งแล้ว"); };
   $("#redo") && ($("#redo").onclick = () => confirmBtn($("#redo"), () => upd(it => { it.status = "todo"; it.plan = []; (it.log ||= []).push({ time: nowIso(), by: "user", text: "ขอให้เริ่มทำใหม่ตั้งแต่ต้น" }); }, "app: เริ่มใหม่", "ตั้งให้ทำใหม่แล้ว")));
   $("#del").onclick = () => confirmBtn($("#del"), () => { state.open = null; upd(it => { it.deleted = true; }, "app: ลบงาน", "ลบแล้ว"); });
 }
 function confirmBtn(b, fn) { if (b.dataset.c) return fn(); b.dataset.c = 1; const o = b.textContent; b.textContent = "แตะอีกครั้งเพื่อยืนยัน"; setTimeout(() => { b.textContent = o; delete b.dataset.c; }, 3000); }
+
+const chatDefault = () => ({ messages: [] });
+async function loadChat() {
+  try { state.chat = (await getFile("chat.json", chatDefault)).data.messages; } catch (e) { toast("โหลดแชทไม่ได้: " + e.message); }
+  if (state.tab === "chat") vChat();
+}
+function vChat() {
+  const v = $("#view");
+  if (!state.chat) { v.innerHTML = `<p class="mute">กำลังโหลด…</p>`; loadChat(); return; }
+  const scope = state.chatScope || "";
+  const tasks = (state.tasks || []);
+  const msgs = state.chat.filter(m => (m.task || "") === scope);
+  const pending = msgs.some(m => m.status === "pending");
+  const draft = $("#q")?.value || "";
+  v.innerHTML = `
+    <div class="card">
+      <label for="scope" style="margin-top:0">ถามเกี่ยวกับ</label>
+      <select id="scope"><option value="">📚 ทุกงาน (ถามรวม)</option>
+        ${tasks.map(t => `<option value="${esc(t.id)}" ${t.id === scope ? "selected" : ""}>${esc(t.title)}</option>`).join("")}</select>
+    </div>
+    ${msgs.length ? "" : `<p class="mute">ยังไม่มีคำถาม ลองถาม เช่น ${scope ? "\"งานนี้ทำอะไรไปแล้วบ้าง\" หรือ \"เปิดใช้งานยังไง\"" : "\"ตอนนี้งานไหนค้างอยู่บ้าง\" หรือ \"สรุปผลงานทั้งหมดให้หน่อย\""}</p>`}
+    ${msgs.map(m => `<div class="log ${m.by === "user" ? "user" : ""}" style="margin:10px 0"><div class="mute">${m.by === "user" ? "คุณ" : "AI"} · ${fmt(m.time)}${m.status === "pending" ? " · ⏳ รอคำตอบ (1–2 นาที)" : ""}</div>${esc(m.text)}</div>`).join("")}
+    <div class="card" style="position:sticky;bottom:72px">
+      <textarea id="q" style="min-height:60px" placeholder="พิมพ์คำถาม…"></textarea>
+      <div class="row" style="margin-top:8px"><span class="mute grow">${pending ? "⏳ AI กำลังอ่านข้อมูลและตอบ…" : "AI จะอ่านแผน บันทึก และผลงานก่อนตอบ"}</span>
+        <button class="primary" id="ask">ถาม</button></div>
+    </div>`;
+  $("#q").value = draft;
+  $("#scope").onchange = e => { state.chatScope = e.target.value; vChat(); };
+  $("#ask").onclick = async () => {
+    const text = $("#q").value.trim(); if (!text) return;
+    $("#ask").disabled = true;
+    const id = "q" + Date.now().toString(36);
+    try {
+      const d = await mutate("chat.json", x => { (x.messages ||= []).push({ id, time: nowIso(), by: "user", task: scope || null, text, status: "pending" }); }, "app: ถามคำถาม", chatDefault);
+      state.chat = d.messages; $("#q").value = "";
+      await gh(`/actions/workflows/ask.yml/dispatches`, { method: "POST", body: JSON.stringify({ ref: S.branch || "main" }) })
+        .catch(e => toast(e.status === 403 ? "Token ไม่มีสิทธิ์ Actions — คำถามจะถูกตอบในรอบถัดไป" : "สั่งตอบไม่สำเร็จ: " + e.message));
+    } catch (e) { toast(e.message); }
+    vChat(); window.scrollTo(0, document.body.scrollHeight);
+  };
+  if (pending) { clearTimeout(vChat.t); vChat.t = setTimeout(() => state.tab === "chat" && !typing() && loadChat(), 15000); }
+}
 
 function vSchedule() {
   const v = $("#view"), c = state.config;

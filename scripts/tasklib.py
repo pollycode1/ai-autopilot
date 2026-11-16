@@ -42,3 +42,13 @@ def merge(a, b):
                 win["deleted"] = True
             out[tid] = win
     return {"tasks": [out[i] for i in order]}
+
+def merge_chat(a, b):
+    """รวม chat.json สองฉบับ: ข้อความรวมกันตาม id ถ้าซ้ำ เอาฉบับที่ตอบแล้ว"""
+    out = {}
+    for src in (a, b):
+        for m in src.get("messages", []):
+            cur = out.get(m.get("id"))
+            if cur is None or (cur.get("status") == "pending" and m.get("status") != "pending"):
+                out[m.get("id")] = m
+    return {"messages": sorted(out.values(), key=lambda m: m.get("time", ""))}

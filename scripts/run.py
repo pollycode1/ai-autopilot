@@ -3,7 +3,7 @@
 import json, os, re, subprocess, sys, time, datetime, pathlib
 from zoneinfo import ZoneInfo
 sys.path.insert(0, os.path.dirname(__file__))
-from tasklib import ROOT, load, save, find, now, merge
+from tasklib import ROOT, load, save, find, now, merge, merge_chat
 
 LIMIT_RE = re.compile(r"usage limit|session limit|weekly limit|rate[ _-]?limit|limit reached|hit your .{0,20}limit|\b429\b|overloaded|quota|credit balance|\bresets?\b|try again later", re.I)
 MAX_WAIT_MIN = int(os.environ.get("MAX_LIMIT_WAIT_MINUTES", "120"))  # รอ limit รีเซ็ตในรอบเดียวกันได้นานสุดกี่นาที
@@ -85,13 +85,15 @@ def sync(msg):
         r = sh("git", "rebase", f"origin/{branch}", check=False)
         while r.returncode != 0:
             conflicted = sh("git", "diff", "--name-only", "--diff-filter=U").stdout.split()
-            if conflicted != ["tasks.json"]:
+            mergers = {"tasks.json": merge, "chat.json": merge_chat}
+            if not conflicted or any(f not in mergers for f in conflicted):
                 sh("git", "rebase", "--abort", check=False)
                 raise SystemExit(f"รวมไฟล์ไม่ได้: {conflicted}")
-            ours = json.loads(sh("git", "show", ":2:tasks.json").stdout)
-            theirs = json.loads(sh("git", "show", ":3:tasks.json").stdout)
-            save(merge(ours, theirs))
-            sh("git", "add", "tasks.json")
+            for f in conflicted:
+                ours = json.loads(sh("git", "show", f":2:{f}").stdout)
+                theirs = json.loads(sh("git", "show", f":3:{f}").stdout)
+                save(mergers[f](ours, theirs), ROOT / f)
+                sh("git", "add", f)
             r = subprocess.run(["git", "-c", "core.editor=true", "rebase", "--continue"], text=True, capture_output=True)
         if sh("git", "push", "-q", "origin", f"HEAD:{branch}", check=False).returncode == 0:
             return

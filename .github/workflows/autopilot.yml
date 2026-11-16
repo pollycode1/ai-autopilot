@@ -24,6 +24,11 @@ jobs:
     timeout-minutes: 330
     steps:
       - uses: actions/checkout@v4
+      - name: มีคำถามค้างอยู่ไหม (เช่นค้างเพราะติด limit)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -f chat.json ] && grep -q '"status": "pending"' chat.json; then gh workflow run ask.yml; fi
       - name: เช็กว่าต้องทำงานไหม
         id: check
         env:
