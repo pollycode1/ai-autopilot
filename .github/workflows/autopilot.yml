@@ -13,9 +13,13 @@ on:
         description: "ทำเฉพาะงาน id นี้ทันที (เว้นว่าง = ทุกงาน)"
         type: string
         default: ""
+      project:
+        description: "ทำเฉพาะโปรเจค id นี้ทันที (เว้นว่าง = ทุกโปรเจค)"
+        type: string
+        default: ""
 
 concurrency:
-  group: ai-autopilot        # รันทีละรอบ ไม่ซ้อนกัน
+  group: ai-autopilot-${{ inputs.project || inputs.task || 'all' }}   # แต่ละโปรเจครันพร้อมกันได้
   cancel-in-progress: false
 
 permissions:
@@ -38,13 +42,14 @@ jobs:
         env:
           FORCE_RUN: ${{ inputs.force }}
           ONLY_TASK: ${{ inputs.task }}
+          ONLY_PROJECT: ${{ inputs.project }}
         run: |
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json, os, sys
           sys.path.insert(0, "scripts")
           from run import window_minutes_left, next_task
           cfg = json.load(open("config.json"))
-          force = os.environ.get("FORCE_RUN") == "true" or bool(os.environ.get("ONLY_TASK"))
+          force = os.environ.get("FORCE_RUN") == "true" or bool(os.environ.get("ONLY_TASK")) or bool(os.environ.get("ONLY_PROJECT"))
           ok = next_task() and (force or (cfg.get("enabled", True) and window_minutes_left(cfg) >= 5))
           print("go=" + ("yes" if ok else "no"))
           PY
@@ -60,6 +65,7 @@ jobs:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           FORCE_RUN: ${{ inputs.force }}
           ONLY_TASK: ${{ inputs.task }}
+          ONLY_PROJECT: ${{ inputs.project }}
         run: |
           git config user.name "ai-autopilot"
           git config user.email "ai-autopilot@users.noreply.github.com"

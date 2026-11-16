@@ -26,14 +26,17 @@ def repo_name():
 
 def prompt_for(q, history):
     full = repo_name(); owner, _, name = full.partition("/")
-    tasks = json.loads((ROOT / "tasks.json").read_text(encoding="utf-8"))["tasks"]
-    scope = q.get("task")
+    sys.path.insert(0, os.path.dirname(__file__))
+    from tasklib import load, project_of, project_name
+    data = load()
+    scope = q.get("task")  # id โปรเจค (ข้อความเก่าอาจเป็น id งาน)
     if scope:
-        t = next((x for x in tasks if x["id"] == scope), None)
-        where = (f'คำถามนี้เกี่ยวกับงาน id="{scope}" ({t["title"] if t else "?"}) '
-                 f'ดูรายละเอียดงานใน tasks.json และผลงานในโฟลเดอร์ workspace/{scope}/')
+        t = next((x for x in data["tasks"] if x["id"] == scope), None)
+        if t: scope = project_of(t)
+        where = (f'คำถามนี้เกี่ยวกับโปรเจค id="{scope}" ({project_name(data, scope)}) '
+                 f'ดูงานของโปรเจคนี้ใน tasks.json (งานที่มี "project": "{scope}") และผลงานในโฟลเดอร์ workspace/{scope}/')
     else:
-        where = "คำถามนี้เป็นคำถามรวม เกี่ยวกับทุกงาน ดูภาพรวมจาก tasks.json และผลงานใน workspace/"
+        where = "คำถามนี้เป็นคำถามรวม เกี่ยวกับทุกโปรเจค ดูภาพรวมจาก tasks.json (มีรายชื่อโปรเจคใน \"projects\") และผลงานใน workspace/"
     hist = "\n".join(f'{"เจ้าของ" if m["by"] == "user" else "AI"}: {m["text"]}' for m in history[-10:])
     return f"""คุณคือผู้ช่วยตอบคำถามเกี่ยวกับงานที่ระบบ AI Autopilot ทำให้เจ้าของ
 ข้อมูลอยู่ใน repo นี้: tasks.json (รายการงาน สถานะ แผน และบันทึกการทำงาน) และ workspace/<id งาน>/ (ไฟล์ผลงาน)
@@ -49,9 +52,10 @@ def prompt_for(q, history):
 
 ให้อ่านไฟล์ที่เกี่ยวข้องก่อนตอบ ตอบจากข้อมูลจริงใน repo ถ้าไม่มีข้อมูลให้บอกตรงๆ
 ตอบเป็นภาษาเดียวกับคำถาม กระชับ อ่านง่ายบนมือถือ ถ้าอ้างถึงไฟล์ให้บอก path
-ห้ามแก้ไขไฟล์ใดๆ ยกเว้น: ถ้าเจ้าของสั่งให้ทำงาน/เพิ่มงาน ให้เพิ่มเป็นงานใหม่เองด้วยคำสั่ง
-  python3 scripts/task.py add "ชื่องานสั้นๆ" "รายละเอียดที่ชัดเจน: ต้องได้อะไร เกณฑ์ว่าเสร็จ และต้องทดสอบอย่างไร"
-(ถ้าเป็นแอป ให้ระบุว่าทำเป็นเว็บแอป static ใน workspace/<id>/ พร้อม app.json) แล้วบอกเจ้าของว่าเพิ่มงานชื่ออะไร
+ห้ามแก้ไขไฟล์ใดๆ ยกเว้น: ถ้าเจ้าของสั่งให้ทำงาน/เพิ่มงาน ให้เพิ่มเป็นงานใหม่เองด้วยคำสั่ง (ดูโปรเจคที่มีด้วย python3 scripts/task.py projects)
+  งานต่อยอดโปรเจคเดิม: python3 scripts/task.py add "ชื่องานสั้นๆ" "รายละเอียดที่ชัดเจน: ต้องได้อะไร เกณฑ์ว่าเสร็จ ต้องทดสอบอย่างไร" --project <id โปรเจค>
+  เรื่องใหม่:          python3 scripts/task.py add "ชื่องานสั้นๆ" "รายละเอียด…" --new-project "ชื่อโปรเจคใหม่"
+(ถ้ากำลังคุยในโปรเจคไหนอยู่ ให้เพิ่มเข้าโปรเจคนั้น ถ้าเป็นแอป ให้ระบุว่าทำเป็นเว็บแอป static พร้อม app.json) แล้วบอกเจ้าของว่าเพิ่มงานชื่ออะไร ในโปรเจคไหน
 AI จะทำในช่วงเวลาทำงานที่ตั้งไว้ (ดู config.json) หรือกด "เริ่มทำงานตอนนี้" ในแท็บสถานะเพื่อเริ่มทันที
 ถ้าคำสั่งกำกวม ให้ถามกลับก่อนเพิ่ม และอย่าเพิ่มงานซ้ำกับงานที่มีอยู่แล้ว
 
@@ -69,7 +73,7 @@ def main():
         history = [m for m in d["messages"] if m.get("time", "") < q.get("time", "") and m.get("task") == q.get("task")]
         print(f"❓ {q['text'][:80]}", flush=True)
         try:
-            p = subprocess.run([CLAUDE, "-p", prompt_for(q, history), "--allowedTools", "Read,Grep,Glob,LS,Bash(python3 scripts/task.py add:*)",
+            p = subprocess.run([CLAUDE, "-p", prompt_for(q, history), "--allowedTools", "Read,Grep,Glob,LS,Bash(python3 scripts/task.py add:*),Bash(python3 scripts/task.py projects)",
                                 "--max-turns", "30"], text=True, capture_output=True, timeout=15 * 60, cwd=ROOT)
             out, code = (p.stdout or "").strip(), p.returncode
             err = (p.stderr or "") + out

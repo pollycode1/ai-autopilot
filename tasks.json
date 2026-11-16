@@ -1,4 +1,11 @@
 {
+  "projects": [
+    {
+      "id": "invest-app",
+      "name": "คลังความรู้ลงทุน",
+      "created": "2026-11-15T18:21:00Z"
+    }
+  ],
   "tasks": [
     {
       "id": "invest-app",
@@ -62,7 +69,8 @@
         }
       ],
       "created": "2026-11-15T18:21:37Z",
-      "updated": "2026-11-15T18:48:16Z"
+      "updated": "2026-11-15T18:48:16Z",
+      "project": "invest-app"
     },
     {
       "id": "invest-app-apk-163",

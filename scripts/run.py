@@ -3,7 +3,7 @@
 import json, os, re, subprocess, sys, time, datetime, pathlib
 from zoneinfo import ZoneInfo
 sys.path.insert(0, os.path.dirname(__file__))
-from tasklib import ROOT, load, save, find, now, merge, merge_chat
+from tasklib import ROOT, load, save, find, now, merge, merge_chat, project_of, project_name
 
 LIMIT_RE = re.compile(r"usage limit|session limit|weekly limit|rate[ _-]?limit|limit reached|hit your .{0,20}limit|\b429\b|overloaded|quota|credit balance|\bresets?\b|try again later", re.I)
 MAX_WAIT_MIN = int(os.environ.get("MAX_LIMIT_WAIT_MINUTES", "120"))  # รอ limit รีเซ็ตในรอบเดียวกันได้นานสุดกี่นาที
@@ -31,7 +31,10 @@ def reset_time(text):
 BUDGET_MIN = int(os.environ.get("RUN_BUDGET_MINUTES", "300"))   # เวลาสูงสุดต่อรอบ
 SESSION_MIN = int(os.environ.get("SESSION_MINUTES", "45"))       # เวลาต่อการเรียก AI หนึ่งครั้ง
 ONLY = os.environ.get("ONLY_TASK", "").strip()                  # ทำเฉพาะงานนี้ทันที (ปุ่ม ▶ ในหน้างาน)
-FORCE = os.environ.get("FORCE_RUN", "").lower() in ("1", "true", "yes") or bool(ONLY)
+ONLY_PROJECT = os.environ.get("ONLY_PROJECT", "").strip()        # ทำเฉพาะโปรเจคนี้ทันที (ปุ่ม ▶ ของโปรเจค)
+FORCE = os.environ.get("FORCE_RUN", "").lower() in ("1", "true", "yes") or bool(ONLY) or bool(ONLY_PROJECT)
+RUN_ID = os.environ.get("GITHUB_RUN_ID") or f"local-{os.getpid()}"
+LOCK_MIN = 70  # งานที่ถูกล็อกโดยรอบอื่นเกินกี่นาทีถือว่าหลุดแล้ว
 CLAUDE = os.environ.get("CLAUDE_BIN", "claude")
 os.chdir(ROOT)
 
@@ -58,14 +61,38 @@ def window_minutes_left(cfg, at=None):
                 best = max(best, int((e - at).total_seconds() // 60))
     return best
 
+def locked_by_other(data, project):
+    """โปรเจคนี้กำลังถูกรอบอื่นทำอยู่ไหม (กันสองรอบแก้ไฟล์เดียวกันพร้อมกัน)"""
+    cutoff = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=LOCK_MIN)).isoformat(timespec="seconds").replace("+00:00", "Z")
+    return any(project_of(t) == project and (t.get("lock") or {}).get("run") not in (None, RUN_ID)
+               and (t.get("lock") or {}).get("at", "") > cutoff for t in data["tasks"])
+
 def next_task(only=None):
     only = ONLY if only is None else only
     data = load()
     live = [t for t in data["tasks"] if not t.get("deleted") and t.get("status", "todo") not in ("done", "blocked")
-            and (not only or t.get("id") == only)]
+            and (not only or t.get("id") == only) and (not ONLY_PROJECT or project_of(t) == ONLY_PROJECT)
+            and not locked_by_other(data, project_of(t))]
     rank = {"testing": 0, "doing": 1, "planning": 2, "todo": 3}
     live.sort(key=lambda t: rank.get(t.get("status", "todo"), 3))
     return live[0] if live else None
+
+def set_lock(tid, on):
+    data = load(); t = find(data, tid)
+    if on:
+        t["lock"] = {"run": RUN_ID, "at": now()}
+    else:
+        t.pop("lock", None)
+    save(data)
+
+def release_locks():
+    data = load(); changed = False
+    for t in data["tasks"]:
+        if (t.get("lock") or {}).get("run") == RUN_ID:
+            t.pop("lock"); changed = True
+    if changed:
+        save(data)
+    return changed
 
 def add_log(tid, text):
     data = load(); t = find(data, tid)
@@ -120,6 +147,16 @@ def sync(msg):
     raise SystemExit("push ไม่สำเร็จ")
 
 def main():
+    try:
+        return work()
+    finally:
+        try:
+            if release_locks():
+                sync("autopilot: ปลดล็อกงาน")
+        except BaseException as e:
+            print("ปลดล็อกไม่สำเร็จ:", e)
+
+def work():
     start = time.time()
     cfg = json.loads((ROOT / "config.json").read_text(encoding="utf-8"))
     if not cfg.get("enabled", True) and not FORCE:
@@ -140,10 +177,13 @@ def main():
         if tried[tid] > 3:
             add_log(tid, "รอบนี้ทำงานนี้ไป 3 ครั้งแล้วยังไม่เสร็จ จะลองใหม่ในรอบถัดไป")
             sync(f"autopilot: พักงาน {tid}"); return 0
+        set_lock(tid, True)
+        sync(f"autopilot: เริ่ม {task.get('title', tid)[:40]}")
         minutes = int(min(SESSION_MIN, left - 2))
         print(f"▶ ทำงาน {tid}: {task.get('title')} ({minutes} นาที)", flush=True)
         prompt = (ROOT / "prompts/agent.md").read_text(encoding="utf-8") \
-            .replace("{TASK_ID}", tid).replace("{MINUTES}", str(minutes))
+            .replace("{TASK_ID}", tid).replace("{MINUTES}", str(minutes)) \
+            .replace("{PROJECT}", project_of(task)).replace("{PROJECT_NAME}", project_name(load(), project_of(task)))
         try:
             p = subprocess.run([CLAUDE, "-p", prompt, "--dangerously-skip-permissions",
                                 "--max-turns", os.environ.get("MAX_TURNS", "150")],

@@ -59,20 +59,21 @@
   const b64d = s => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\n/g, "")), c => c.charCodeAt(0)));
   async function requestUpdate(key, msg) {
     const now = new Date().toISOString().replace(/\.\d+Z$/, "Z");
+    const id = "t" + Date.now().toString(36);
     for (let i = 0; i < 4; i++) {
       const j = await gh(key, "/contents/tasks.json");
       const d = JSON.parse(b64d(j.content));
-      const t = d.tasks.find(x => x.id === APP);
-      if (!t) throw new Error("ไม่พบงานของแอปนี้ในระบบ");
-      (t.log ||= []).push({ time: now, by: "user", text: "[ขอจากในแอป] " + msg });
-      t.status = "doing"; t.updated = now;
+      d.projects ||= [];
+      if (!d.projects.some(p => p.id === APP)) d.projects.push({ id: APP, name: document.title || APP, created: now });
+      d.tasks.push({ id, project: APP, title: "อัปเดตจากในแอป: " + msg.slice(0, 40), detail: msg, status: "todo", plan: [],
+        log: [{ time: now, by: "user", text: "[ขอจากในแอป] " + msg }], created: now, updated: now });
       try {
         await gh(key, "/contents/tasks.json", { method: "PUT", body: JSON.stringify({ message: "app: ขออัปเดต " + APP, sha: j.sha,
           content: b64e(JSON.stringify(d, null, 2) + "\n") }) });
         break;
       } catch (e) { if (e.status !== 409 && e.status !== 422 || i === 3) throw e; await new Promise(r => setTimeout(r, 1000)); }
     }
-    await gh(key, "/actions/workflows/autopilot.yml/dispatches", { method: "POST", body: JSON.stringify({ ref: "main", inputs: { force: true } }) });
+    await gh(key, "/actions/workflows/autopilot.yml/dispatches", { method: "POST", body: JSON.stringify({ ref: "main", inputs: { force: true, project: APP } }) });
   }
   // 2) แจ้งเตือน APK ใหม่ (เฉพาะตอนเปิดจากไฟล์ APK)
   function checkApk() {

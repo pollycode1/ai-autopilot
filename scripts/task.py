@@ -6,22 +6,44 @@
   python3 scripts/task.py plan <id> "ขั้นที่ 1" "ขั้นที่ 2" ...   (ตั้งแผนใหม่ทั้งหมด)
   python3 scripts/task.py step <id> <ลำดับขั้น เริ่มที่ 1>         (ติ๊กว่าขั้นนั้นเสร็จ)
   python3 scripts/task.py log <id> "ข้อความ"
-  python3 scripts/task.py add "ชื่องาน" "รายละเอียด"              (เพิ่มงานใหม่)
+  python3 scripts/task.py projects                                (ดูรายชื่อโปรเจค)
+  python3 scripts/task.py add "ชื่องาน" "รายละเอียด" --project <id โปรเจคเดิม>
+  python3 scripts/task.py add "ชื่องาน" "รายละเอียด" --new-project "ชื่อโปรเจคใหม่"
 """
 import sys, json
 sys.path.insert(0, __import__("os").path.dirname(__file__))
 from tasklib import load, save, find, now, STATUSES
 
 def main(argv):
-    if len(argv) < 2:
+    if not argv or (len(argv) < 2 and argv[0] != "projects"):
         raise SystemExit(__doc__)
+    if argv[0] == "projects":
+        data = load()
+        from tasklib import project_of, project_name
+        ids = list(dict.fromkeys([p["id"] for p in data["projects"]] + [project_of(t) for t in data["tasks"] if not t.get("deleted")]))
+        for i in ids:
+            print(f"{i}\t{project_name(data, i)}")
+        return
     cmd, tid, rest = argv[0], argv[1], argv[2:]
     data = load()
     if cmd == "add":
+        project = None
+        if "--project" in rest:
+            k = rest.index("--project"); project = rest[k + 1]; del rest[k:k + 2]
+        if "--new-project" in rest:
+            import re as _re, time as _t
+            k = rest.index("--new-project"); pname = rest[k + 1]; del rest[k:k + 2]
+            import secrets as _s
+            project = (_re.sub(r"[^a-z0-9]+", "-", pname.lower()).strip("-")[:20] or "p") + f"-{_s.token_hex(3)}"
+            data["projects"].append({"id": project, "name": pname, "created": now()})
         import re, time
         slug = re.sub(r"[^a-z0-9]+", "-", tid.lower()).strip("-")[:24] or "task"
-        nid = f"{slug}-{int(time.time()) % 100000}"
-        data["tasks"].append({"id": nid, "title": tid, "detail": " ".join(rest), "status": "todo",
+        import secrets
+        nid = f"{slug}-{secrets.token_hex(3)}"
+        if not project:
+            project = nid
+            data["projects"].append({"id": project, "name": tid, "created": now()})
+        data["tasks"].append({"id": nid, "project": project, "title": tid, "detail": " ".join(rest), "status": "todo",
                               "plan": [], "log": [], "created": now(), "updated": now()})
         save(data); print(nid); return
     t = find(data, tid)

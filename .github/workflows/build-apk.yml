@@ -31,7 +31,9 @@ jobs:
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json, os, pathlib
           req = os.environ["REQ"].strip()
-          tasks = {t["id"]: t for t in json.load(open("tasks.json"))["tasks"]}
+          data = json.load(open("tasks.json"))
+          tasks = {t["id"]: t for t in data["tasks"]}
+          tasks.update({p["id"]: {"title": p.get("name", p["id"])} for p in data.get("projects", [])})
           avail = ["autopilot"] + sorted(p.parent.name for p in pathlib.Path("workspace").glob("*/index.html"))
           want = avail if req == "all" else [a.strip() for a in req.split(",") if a.strip() in avail]
           apps = []

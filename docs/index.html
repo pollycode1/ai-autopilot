@@ -105,7 +105,7 @@ async function load(quiet) {
   $("#sync").textContent = "กำลังซิงค์…";
   try {
     const [t, c] = await Promise.all([getFile("tasks.json"), getFile("config.json")]);
-    state.tasks = t.data.tasks.filter(x => !x.deleted); state.config = c.data;
+    state.tasks = t.data.tasks.filter(x => !x.deleted); state.projects = t.data.projects || []; state.config = c.data;
     $("#sync").textContent = "ซิงค์ " + new Date().toLocaleTimeString("th-TH", {timeStyle:"short"});
   } catch (e) {
     $("#sync").textContent = "ซิงค์ไม่ได้";
@@ -121,34 +121,88 @@ function render() {
   ({ tasks: vTasks, chat: vChat, schedule: vSchedule, runs: vRuns, settings: vSettings })[state.tab]();
 }
 
+const projOf = t => t.project || t.id;
+function projList() {
+  const names = Object.fromEntries((state.projects || []).map(p => [p.id, p.name]));
+  const ids = [...new Set([...(state.projects || []).map(p => p.id), ...(state.tasks || []).map(projOf)])]
+    .filter(id => (state.tasks || []).some(t => projOf(t) === id) || (state.projects || []).some(p => p.id === id));
+  return ids.map(id => ({ id, name: names[id] || (state.tasks.find(t => t.id === id) || {}).title || id }));
+}
+function loadApks(cb) {
+  if (state.apks) return;
+  state.apks = {};
+  fetch(`https://api.github.com/repos/${S.owner}/${S.repo}/releases/tags/apps`, { cache: "no-store" })
+    .then(r => r.ok ? r.json() : { assets: [] })
+    .then(j => { j.assets.forEach(a => state.apks[a.name.replace(/\.apk$/, "")] = a.browser_download_url); cb && cb(); }).catch(() => {});
+}
+async function runProject(pid, btn) {
+  btn && (btn.disabled = true);
+  try { await gh(`/actions/workflows/autopilot.yml/dispatches`, { method: "POST", body: JSON.stringify({ ref: S.branch || "main", inputs: { force: true, project: pid } }) });
+    toast("เริ่มทำโปรเจคนี้แล้ว (โปรเจคอื่นรอช่วงเวลาตามปกติ)"); }
+  catch (e) { toast(e.status === 403 ? "Token ไม่มีสิทธิ์ Actions" : e.message); btn && (btn.disabled = false); }
+}
+
 function vTasks() {
   const v = $("#view");
   if (state.open) return vTask(state.tasks?.find(t => t.id === state.open));
   if (!state.tasks) { v.innerHTML = `<p class="mute">กำลังโหลด…</p>`; return; }
+  loadApks(() => state.tab === "tasks" && !state.open && !typing() && vTasks());
   const order = {blocked:0,testing:1,doing:1,planning:1,todo:2,done:3};
-  const list = [...state.tasks].sort((a,b) => (order[a.status]??2) - (order[b.status]??2));
+  const projects = projList();
+  const sel = state.newProj ?? (projects.length ? projects[0].id : "__new");
+  const groups = projects.map(p => ({ ...p, tasks: state.tasks.filter(t => projOf(t) === p.id).sort((a,b) => (order[a.status]??2) - (order[b.status]??2)) }))
+    .sort((a, b) => Math.min(...a.tasks.map(t => order[t.status]??2)) - Math.min(...b.tasks.map(t => order[t.status]??2)));
+  const draft = { nt: $("#nt")?.value || "", nd: $("#nd")?.value || "", np: $("#np")?.value || "" };
   v.innerHTML = `
     <div class="card">
+      <label for="ps" style="margin-top:0">โปรเจค</label>
+      <select id="ps">${projects.map(p => `<option value="${esc(p.id)}" ${p.id === sel ? "selected" : ""}>📁 ${esc(p.name)}</option>`).join("")}
+        <option value="__new" ${sel === "__new" ? "selected" : ""}>＋ สร้างโปรเจคใหม่</option></select>
+      <div id="npw" class="${sel === "__new" ? "" : "hidden"}"><label for="np">ชื่อโปรเจคใหม่</label><input id="np" placeholder="เช่น แอปจดรายรับรายจ่าย"></div>
       <label for="nt">อยากให้ AI ทำอะไร</label>
-      <input id="nt" placeholder="เช่น ทำเว็บแนะนำร้านกาแฟ 1 หน้า">
+      <input id="nt" placeholder="${sel === "__new" ? "เช่น ทำแอปจดรายรับรายจ่ายแบบง่าย" : "เช่น เพิ่มหน้ากราฟสรุปรายเดือน"}">
       <label for="nd">รายละเอียด (ไม่บังคับ)</label>
       <textarea id="nd" placeholder="เป้าหมาย ความต้องการ ข้อจำกัด ตัวอย่างที่ชอบ…"></textarea>
-      <div class="row" style="margin-top:10px"><span class="grow"></span><button class="primary" id="add">+ เพิ่มงาน</button></div>
+      <div class="row" style="margin-top:10px"><label class="row" style="margin:0;color:var(--ink)"><input type="checkbox" id="now" style="width:20px;height:20px"> ทำทันที</label>
+        <span class="grow"></span><button class="primary" id="add">+ เพิ่มงาน</button></div>
     </div>
-    ${list.length ? "" : `<p class="mute">ยังไม่มีงาน เพิ่มงานแรกด้านบนได้เลย</p>`}
-    ${list.map(t => { const n=(t.plan||[]).length, d=(t.plan||[]).filter(s=>s.done).length; return `
-      <div class="card task" data-id="${esc(t.id)}">
-        <div class="row"><h3 class="grow">${esc(t.title)}</h3><span class="badge s-${esc(t.status)}">${LABEL[t.status]||esc(t.status)}</span></div>
-        <div class="mute">${n ? `${d}/${n} ขั้นตอน · ` : ""}อัปเดต ${fmt(t.updated)}</div>
-        ${n ? `<div class="progress"><i style="width:${Math.round(d/n*100)}%"></i></div>` : ""}
+    ${groups.length ? "" : `<p class="mute">ยังไม่มีงาน เพิ่มงานแรกด้านบนได้เลย</p>`}
+    ${groups.map(g => { const left = g.tasks.filter(t => t.status !== "done").length; return `
+      <div class="card" style="border-width:2px">
+        <div class="row"><h3 class="grow" style="margin:0">📁 ${esc(g.name)}</h3><span class="mute">${left ? `ค้าง ${left} งาน` : "เสร็จหมดแล้ว"}</span></div>
+        <div class="row" style="margin:8px 0">
+          ${left ? `<button class="primary" data-runp="${esc(g.id)}">▶ ทำโปรเจคนี้เลย</button>` : ""}
+          <button data-addp="${esc(g.id)}">＋ งาน</button>
+          <a class="btn" href="https://${esc(S.owner)}.github.io/${esc(S.repo)}/workspace/${esc(g.id)}/" target="_blank" rel="noopener">🌐 เปิด</a>
+          ${state.apks && state.apks[g.id] ? `<a class="btn" href="${esc(state.apks[g.id])}">📱 APK</a>` : ""}
+        </div>
+        ${g.tasks.map(t => { const n=(t.plan||[]).length, d=(t.plan||[]).filter(s=>s.done).length; return `
+          <div class="task" data-id="${esc(t.id)}" style="border-top:1px solid var(--line);padding:10px 0 4px">
+            <div class="row"><span class="grow">${esc(t.title)}</span><span class="badge s-${esc(t.status)}">${LABEL[t.status]||esc(t.status)}</span></div>
+            <div class="mute">${n ? `${d}/${n} ขั้นตอน · ` : ""}อัปเดต ${fmt(t.updated)}</div>
+            ${n && t.status !== "done" ? `<div class="progress"><i style="width:${Math.round(d/n*100)}%"></i></div>` : ""}
+          </div>`; }).join("")}
       </div>`; }).join("")}`;
+  $("#nt").value = draft.nt; $("#nd").value = draft.nd; $("#np").value = draft.np;
+  $("#ps").onchange = e => { state.newProj = e.target.value; vTasks(); };
+  document.querySelectorAll("[data-runp]").forEach(b => b.onclick = () => runProject(b.dataset.runp, b));
+  document.querySelectorAll("[data-addp]").forEach(b => b.onclick = () => { state.newProj = b.dataset.addp; vTasks(); window.scrollTo(0, 0); $("#nt").focus(); });
   $("#add").onclick = async () => {
-    const title = $("#nt").value.trim(); if (!title) return toast("ใส่ชื่องานก่อน");
-    const detail = $("#nd").value.trim(); $("#add").disabled = true;
+    const title = $("#nt").value.trim(); if (!title) return toast("ใส่สิ่งที่อยากให้ทำก่อน");
+    const detail = $("#nd").value.trim(), runNow = $("#now").checked;
+    let pid = $("#ps").value, pname = null;
+    if (pid === "__new") { pname = $("#np").value.trim() || title; pid = "p" + Date.now().toString(36); }
+    $("#add").disabled = true;
     try {
       const id = "t" + Date.now().toString(36);
-      const d = await mutate("tasks.json", x => x.tasks.push({ id, title, detail, status:"todo", plan:[], log:[], created: nowIso(), updated: nowIso() }), `app: เพิ่มงาน ${title}`);
-      state.tasks = d.tasks.filter(x => !x.deleted); toast("เพิ่มงานแล้ว AI จะเริ่มทำในช่วงเวลาที่ตั้งไว้");
+      const d = await mutate("tasks.json", x => {
+        x.projects ||= [];
+        if (pname) x.projects.push({ id: pid, name: pname, created: nowIso() });
+        x.tasks.push({ id, project: pid, title, detail, status: "todo", plan: [], log: [], created: nowIso(), updated: nowIso() });
+      }, `app: เพิ่มงาน ${title}`);
+      state.tasks = d.tasks.filter(x => !x.deleted); state.projects = d.projects || []; state.newProj = pid;
+      $("#nt").value = ""; $("#nd").value = ""; $("#np").value = "";
+      if (runNow) await runProject(pid); else toast("เพิ่มงานแล้ว AI จะทำในช่วงเวลาที่ตั้งไว้");
     } catch (e) { toast(e.message); }
     render();
   };
@@ -162,11 +216,12 @@ function vTask(t) {
     <button id="back">← กลับ</button>
     <div class="card" style="margin-top:12px">
       <div class="row"><h2 class="grow" style="margin:0;font-size:20px">${esc(t.title)}</h2><span class="badge s-${esc(t.status)}">${LABEL[t.status]||esc(t.status)}</span></div>
+      <div class="mute">📁 ${esc((projList().find(p => p.id === projOf(t)) || {}).name || projOf(t))}</div>
       ${t.detail ? `<p style="white-space:pre-wrap">${esc(t.detail)}</p>` : ""}
-      <div class="row"><a class="btn" href="https://${esc(S.owner)}.github.io/${esc(S.repo)}/workspace/${esc(t.id)}/" target="_blank" rel="noopener">🌐 เปิดดูผลงาน</a>
-      <button id="askt">💬 ถามเกี่ยวกับงานนี้</button>
-      ${(state.apks||{})[t.id] ? `<a class="btn" href="${esc(state.apks[t.id])}">📱 ดาวน์โหลด APK</a>` : ""}
-      <a class="btn" href="https://github.com/${esc(S.owner)}/${esc(S.repo)}/tree/${esc(S.branch||"main")}/workspace/${esc(t.id)}" target="_blank" rel="noopener">📁 ไฟล์ทั้งหมด</a></div>
+      <div class="row"><a class="btn" href="https://${esc(S.owner)}.github.io/${esc(S.repo)}/workspace/${esc(projOf(t))}/" target="_blank" rel="noopener">🌐 เปิดดูผลงาน</a>
+      <button id="askt">💬 ถามเกี่ยวกับโปรเจคนี้</button>
+      ${(state.apks||{})[projOf(t)] ? `<a class="btn" href="${esc(state.apks[projOf(t)])}">📱 ดาวน์โหลด APK</a>` : ""}
+      <a class="btn" href="https://github.com/${esc(S.owner)}/${esc(S.repo)}/tree/${esc(S.branch||"main")}/workspace/${esc(projOf(t))}" target="_blank" rel="noopener">📁 ไฟล์ทั้งหมด</a></div>
     </div>
     <div class="card"><b>แผนที่ AI วิเคราะห์</b>
       ${(t.plan||[]).length ? t.plan.map((s,i) => `<div class="step">${s.done?"✅":"⬜"} <span>${i+1}. ${esc(s.text)}</span></div>`).join("") : `<p class="mute">AI จะวิเคราะห์และแตกเป็นขั้นตอนเมื่อเริ่มทำงานนี้</p>`}
@@ -186,9 +241,8 @@ function vTask(t) {
   const upd = (fn, msg, ok) => mutate("tasks.json", x => { const it = x.tasks.find(y => y.id === t.id); fn(it); it.updated = nowIso(); }, msg)
     .then(d => { state.tasks = d.tasks.filter(x => !x.deleted); toast(ok); render(); }).catch(e => toast(e.message));
   $("#back").onclick = () => { state.open = null; render(); };
-  if (!state.apks) { state.apks = {}; fetch(`https://api.github.com/repos/${S.owner}/${S.repo}/releases/tags/apps`, { cache: "no-store" })
-    .then(r => r.ok ? r.json() : { assets: [] }).then(j => { j.assets.forEach(a => state.apks[a.name.replace(/\.apk$/, "")] = a.browser_download_url); if (state.open === t.id) render(); }).catch(() => {}); }
-  $("#askt").onclick = () => { state.chatScope = t.id; state.open = null; state.tab = "chat"; render(); };
+  loadApks(() => state.open === t.id && render());
+  $("#askt").onclick = () => { state.chatScope = projOf(t); state.open = null; state.tab = "chat"; render(); };
   $("#send").onclick = () => { const m = $("#msg").value.trim(); if (!m) return;
     upd(it => { (it.log ||= []).push({ time: nowIso(), by: "user", text: m }); if (it.status === "blocked" || it.status === "done") it.status = "doing"; }, "app: ข้อความถึง AI", "ส่งแล้ว"); };
   $("#redo") && ($("#redo").onclick = () => confirmBtn($("#redo"), () => upd(it => { it.status = "todo"; it.plan = []; (it.log ||= []).push({ time: nowIso(), by: "user", text: "ขอให้เริ่มทำใหม่ตั้งแต่ต้น" }); }, "app: เริ่มใหม่", "ตั้งให้ทำใหม่แล้ว")));
@@ -218,10 +272,10 @@ function vChat() {
   v.innerHTML = `
     <div class="card">
       <label for="scope" style="margin-top:0">ถามเกี่ยวกับ</label>
-      <select id="scope"><option value="">📚 ทุกงาน (ถามรวม)</option>
-        ${tasks.map(t => `<option value="${esc(t.id)}" ${t.id === scope ? "selected" : ""}>${esc(t.title)}</option>`).join("")}</select>
+      <select id="scope"><option value="">📚 ทุกโปรเจค (ถามรวม)</option>
+        ${projList().map(p => `<option value="${esc(p.id)}" ${p.id === scope ? "selected" : ""}>📁 ${esc(p.name)}</option>`).join("")}</select>
     </div>
-    ${msgs.length ? "" : `<p class="mute">ยังไม่มีคำถาม ลองถาม เช่น ${scope ? "\"งานนี้ทำอะไรไปแล้วบ้าง\" หรือ \"เปิดใช้งานยังไง\"" : "\"ตอนนี้งานไหนค้างอยู่บ้าง\" หรือ \"สรุปผลงานทั้งหมดให้หน่อย\""}</p>`}
+    ${msgs.length ? "" : `<p class="mute">ยังไม่มีคำถาม ลองถาม เช่น ${scope ? "\"โปรเจคนี้ทำอะไรไปแล้วบ้าง\" หรือ \"เพิ่มงาน: …\"" : "\"ตอนนี้งานไหนค้างอยู่บ้าง\" หรือ \"สรุปผลงานทั้งหมดให้หน่อย\""}</p>`}
     ${msgs.map(m => `<div class="log ${m.by === "user" ? "user" : ""}" style="margin:10px 0"><div class="mute">${m.by === "user" ? "คุณ" : "AI"} · ${fmt(m.time)}${m.status === "pending" ? " · ⏳ รอคำตอบ (1–2 นาที)" : ""}</div>${esc(m.text)}</div>`).join("")}
     <div class="card" style="position:sticky;bottom:72px">
       <textarea id="q" style="min-height:60px" placeholder="พิมพ์คำถาม…"></textarea>
@@ -318,7 +372,7 @@ function vSettings() {
 
 const typing = () => /INPUT|TEXTAREA/.test(document.activeElement?.tagName) && document.activeElement.value;
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => { state.tab = b.dataset.tab; state.open = null; state.draft = null; render(); });
-$("#refresh").onclick = () => load();
+$("#refresh").onclick = () => { state.apks = null; load(); };
 document.addEventListener("visibilitychange", () => { if (!document.hidden && !typing()) load(true); });
 setInterval(() => { if (!document.hidden && state.tab === "tasks" && !typing()) load(true); }, 60000);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});

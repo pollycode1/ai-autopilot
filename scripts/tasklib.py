@@ -14,7 +14,19 @@ def load(path=TASKS):
     except FileNotFoundError:
         data = {}
     data.setdefault("tasks", [])
+    data.setdefault("projects", [])
     return data
+
+def project_of(t):
+    """โปรเจคของงาน (งานเก่าที่ไม่มีโปรเจค ใช้ id งานเป็นโปรเจค)"""
+    return t.get("project") or t.get("id")
+
+def project_name(data, pid):
+    for p in data.get("projects", []):
+        if p.get("id") == pid:
+            return p.get("name") or pid
+    t = next((x for x in data["tasks"] if x.get("id") == pid), None)
+    return (t or {}).get("title", pid)
 
 def save(data, path=TASKS):
     pathlib.Path(path).write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -41,7 +53,11 @@ def merge(a, b):
             if cur.get("deleted") or t.get("deleted"):
                 win["deleted"] = True
             out[tid] = win
-    return {"tasks": [out[i] for i in order]}
+    projects = {}
+    for src in (a, b):
+        for p in src.get("projects", []):
+            projects.setdefault(p.get("id"), p)
+    return {"projects": list(projects.values()), "tasks": [out[i] for i in order]}
 
 def merge_chat(a, b):
     """รวม chat.json สองฉบับ: ข้อความรวมกันตาม id ถ้าซ้ำ เอาฉบับที่ตอบแล้ว"""
