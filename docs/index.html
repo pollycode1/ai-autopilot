@@ -165,7 +165,7 @@ function vTask(t) {
       ${t.detail ? `<p style="white-space:pre-wrap">${esc(t.detail)}</p>` : ""}
       <div class="row"><a class="btn" href="https://${esc(S.owner)}.github.io/${esc(S.repo)}/workspace/${esc(t.id)}/" target="_blank" rel="noopener">🌐 เปิดดูผลงาน</a>
       <button id="askt">💬 ถามเกี่ยวกับงานนี้</button>
-      <a class="btn" href="https://github.com/${esc(S.owner)}/${esc(S.repo)}/releases/download/apps/${esc(t.id)}.apk">📱 ดาวน์โหลด APK</a>
+      ${(state.apks||{})[t.id] ? `<a class="btn" href="${esc(state.apks[t.id])}">📱 ดาวน์โหลด APK</a>` : ""}
       <a class="btn" href="https://github.com/${esc(S.owner)}/${esc(S.repo)}/tree/${esc(S.branch||"main")}/workspace/${esc(t.id)}" target="_blank" rel="noopener">📁 ไฟล์ทั้งหมด</a></div>
     </div>
     <div class="card"><b>แผนที่ AI วิเคราะห์</b>
@@ -185,6 +185,8 @@ function vTask(t) {
   const upd = (fn, msg, ok) => mutate("tasks.json", x => { const it = x.tasks.find(y => y.id === t.id); fn(it); it.updated = nowIso(); }, msg)
     .then(d => { state.tasks = d.tasks.filter(x => !x.deleted); toast(ok); render(); }).catch(e => toast(e.message));
   $("#back").onclick = () => { state.open = null; render(); };
+  if (!state.apks) { state.apks = {}; fetch(`https://api.github.com/repos/${S.owner}/${S.repo}/releases/tags/apps`, { cache: "no-store" })
+    .then(r => r.ok ? r.json() : { assets: [] }).then(j => { j.assets.forEach(a => state.apks[a.name.replace(/\.apk$/, "")] = a.browser_download_url); if (state.open === t.id) render(); }).catch(() => {}); }
   $("#askt").onclick = () => { state.chatScope = t.id; state.open = null; state.tab = "chat"; render(); };
   $("#send").onclick = () => { const m = $("#msg").value.trim(); if (!m) return;
     upd(it => { (it.log ||= []).push({ time: nowIso(), by: "user", text: m }); if (it.status === "blocked" || it.status === "done") it.status = "doing"; }, "app: ข้อความถึง AI", "ส่งแล้ว"); };
