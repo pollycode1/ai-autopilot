@@ -74,7 +74,16 @@
       "by": "user",
       "task": "invest-app",
       "text": "เพิ่ม task เข้าไป",
-      "status": "pending"
+      "status": "answered"
+    },
+    {
+      "id": "qmwipnm8o-a",
+      "time": "2026-11-16T03:36:09Z",
+      "by": "ai",
+      "task": "invest-app",
+      "reply_to": "qmwipnm8o",
+      "text": "เพิ่มงานเรียบร้อยแล้วครับ\n\n- **ID งาน:** `invest-app-apk-163`\n- **ชื่อ:** แปลง invest-app เป็น APK\n- **รายละเอียด:** ครอบ `workspace/invest-app/` ด้วย WebView (Capacitor/Cordova) ฝังไฟล์และข้อมูล JSON ไว้ในแอปให้ใช้งานออฟไลน์ได้ build เป็น debug APK พอสำหรับทดสอบ\n\nไปแท็บ \"สถานะ\" แล้วกด **\"เริ่มทำงานตอนนี้\"** เพื่อให้ AI เริ่มทำทันที หรือรอรอบงานอัตโนมัติตามเวลาที่ตั้งไว้ใน `config.json` ครับ",
+      "status": "answered"
     }
   ]
 }
