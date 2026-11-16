@@ -16,6 +16,7 @@ concurrency:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   work:
@@ -51,4 +52,13 @@ jobs:
         run: |
           git config user.name "ai-autopilot"
           git config user.email "ai-autopilot@users.noreply.github.com"
+          echo "BEFORE=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
           python3 scripts/run.py
+      - name: สั่ง build APK ของแอปที่มีการเปลี่ยนแปลง
+        if: always() && steps.check.outputs.go == 'yes'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git fetch -q origin "${GITHUB_REF_NAME}" && git checkout -q "origin/${GITHUB_REF_NAME}"
+          apps=$(git diff --name-only "$BEFORE" HEAD -- workspace/ | cut -d/ -f2 | sort -u | while read a; do [ -f "workspace/$a/index.html" ] && echo "$a"; done | paste -sd, -)
+          if [ -n "$apps" ]; then echo "build: $apps"; gh workflow run build-apk.yml -f apps="$apps"; else echo "ไม่มีแอปที่ต้อง build"; fi

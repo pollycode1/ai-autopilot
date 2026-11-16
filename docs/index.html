@@ -161,6 +161,7 @@ function vTask(t) {
       <div class="row"><h2 class="grow" style="margin:0;font-size:20px">${esc(t.title)}</h2><span class="badge s-${esc(t.status)}">${LABEL[t.status]||esc(t.status)}</span></div>
       ${t.detail ? `<p style="white-space:pre-wrap">${esc(t.detail)}</p>` : ""}
       <div class="row"><a class="btn" href="https://${esc(S.owner)}.github.io/${esc(S.repo)}/workspace/${esc(t.id)}/" target="_blank" rel="noopener">🌐 เปิดดูผลงาน</a>
+      <a class="btn" href="https://github.com/${esc(S.owner)}/${esc(S.repo)}/releases/download/apps/${esc(t.id)}.apk">📱 ดาวน์โหลด APK</a>
       <a class="btn" href="https://github.com/${esc(S.owner)}/${esc(S.repo)}/tree/${esc(S.branch||"main")}/workspace/${esc(t.id)}" target="_blank" rel="noopener">📁 ไฟล์ทั้งหมด</a></div>
     </div>
     <div class="card"><b>แผนที่ AI วิเคราะห์</b>
@@ -248,6 +249,7 @@ function vSettings() {
       <label>Personal access token</label><input id="tk" type="password" value="${esc(S.token||"")}" placeholder="github_pat_…">
       <div class="row" style="margin-top:12px"><button id="out" class="danger">ออกจากระบบ</button><span class="grow"></span><button class="primary" id="sv">บันทึกและเชื่อมต่อ</button></div>
     </div>
+    <p class="mute">📱 ดาวน์โหลดแอปทั้งหมดเป็นไฟล์ APK: <a href="https://github.com/${esc(S.owner||"")}/${esc(S.repo||"")}/releases/tag/apps" target="_blank" rel="noopener">หน้าดาวน์โหลด</a></p>
     <p class="mute">ติดตั้งเป็นแอป: บน Android เปิดใน Chrome → เมนู ⋮ → "เพิ่มลงในหน้าจอหลัก" / บนคอม กดไอคอนติดตั้งท้ายช่อง URL</p>`;
   $("#sv").onclick = async () => {
     S = { owner: $("#ow").value.trim(), repo: $("#rp").value.trim(), branch: $("#br").value.trim() || "main", token: $("#tk").value.trim() };
