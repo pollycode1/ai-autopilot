@@ -11,6 +11,7 @@ async function loadJSON(path) {
 
 let INVESTMENTS = [];
 let STRATEGIES = [];
+let GLOBAL_INVESTMENTS = [];
 
 // ===== Tabs =====
 function initTabs() {
@@ -47,6 +48,7 @@ function openDetail(inv) {
   const body = document.getElementById("modalBody");
   body.innerHTML = `
     <h2>${inv.name}</h2>
+    ${inv.region ? `<p class="region-tag">${inv.region}</p>` : ""}
     <p>${inv.shortDesc}</p>
     <p><strong>ผลตอบแทนคาดหวัง:</strong> ${inv.expectedReturn}</p>
     <p><strong>ความเสี่ยง:</strong> <span class="badge risk-${inv.riskScore}">${inv.risk}</span></p>
@@ -63,6 +65,25 @@ function openDetail(inv) {
   document.getElementById("detailModal").classList.remove("hidden");
 }
 
+// ===== Global investments =====
+function renderGlobalCards() {
+  const wrap = document.getElementById("globalCards");
+  wrap.innerHTML = "";
+  GLOBAL_INVESTMENTS.forEach((inv) => {
+    const card = document.createElement("div");
+    card.className = "inv-card";
+    card.innerHTML = `
+      <span class="region-tag">${inv.region}</span>
+      <h3>${inv.name}</h3>
+      <p>${inv.shortDesc}</p>
+      <p><strong>ผลตอบแทนคาดหวัง:</strong> ${inv.expectedReturn}</p>
+      <span class="badge risk-${inv.riskScore}">ความเสี่ยง: ${inv.risk}</span>
+    `;
+    card.addEventListener("click", () => openDetail(inv));
+    wrap.appendChild(card);
+  });
+}
+
 function initModal() {
   document.getElementById("modalClose").addEventListener("click", () => {
     document.getElementById("detailModal").classList.add("hidden");
@@ -73,10 +94,14 @@ function initModal() {
 }
 
 // ===== Compare table + chart =====
+function allInvestments() {
+  return [...INVESTMENTS, ...GLOBAL_INVESTMENTS];
+}
+
 function renderCompare() {
   const tbody = document.querySelector("#compareTable tbody");
   tbody.innerHTML = "";
-  INVESTMENTS.forEach((inv) => {
+  allInvestments().forEach((inv) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${inv.name}</td>
@@ -151,17 +176,19 @@ function drawRiskReturnChart() {
     ctx.fillText(String(r), x - 3, H - padding.bottom + 18);
   }
 
-  INVESTMENTS.forEach((inv, i) => {
+  allInvestments().forEach((inv, i) => {
     const x = padding.left + (inv.riskScore / maxRisk) * plotW;
     const retVal = Math.max(0, Math.min(maxReturn, approxReturnMidpoint(inv)));
     const y = H - padding.bottom - (retVal / maxReturn) * plotH;
     ctx.beginPath();
-    ctx.arc(x, y, 7, 0, Math.PI * 2);
-    ctx.fillStyle = `hsl(${(i * 47) % 360}, 70%, 55%)`;
+    ctx.arc(x, y, 5, 0, Math.PI * 2);
+    ctx.fillStyle = `hsl(${(i * 37) % 360}, 70%, 55%)`;
     ctx.fill();
     ctx.fillStyle = "#e2e8f0";
-    ctx.font = "11px sans-serif";
-    ctx.fillText(inv.name, x + 10, y + 4);
+    ctx.font = "10px sans-serif";
+    // สลับตำแหน่งป้ายชื่อบน/ล่างจุดตามลำดับ ลดการซ้อนทับกันเมื่อมีจุดจำนวนมาก
+    const labelY = i % 2 === 0 ? y + 3 : y + 14;
+    ctx.fillText(inv.name, x + 8, labelY);
   });
 }
 
@@ -350,10 +377,126 @@ function calcGoal() {
   `;
 }
 
+function calcTrade() {
+  const buyPrice = Number(document.getElementById("tradeBuyPrice").value) || 0;
+  const sellPrice = Number(document.getElementById("tradeSellPrice").value) || 0;
+  const qty = Number(document.getElementById("tradeQty").value) || 0;
+  const feePct = Number(document.getElementById("tradeFeePct").value) || 0;
+
+  const costBuy = buyPrice * qty;
+  const costSell = sellPrice * qty;
+  const fee = (costBuy + costSell) * (feePct / 100);
+  const netProfit = costSell - costBuy - fee;
+  const returnPct = costBuy > 0 ? (netProfit / costBuy) * 100 : 0;
+
+  const box = document.getElementById("tradeResult");
+  box.classList.remove("hidden");
+  box.innerHTML = `
+    <p><strong>เงินลงทุน:</strong> ${fmtBaht(costBuy)}</p>
+    <p><strong>เงินที่ได้รับจากการขาย:</strong> ${fmtBaht(costSell)}</p>
+    <p><strong>ค่าธรรมเนียมรวม:</strong> ${fmtBaht(fee)}</p>
+    <p><strong>${netProfit >= 0 ? "กำไรสุทธิ" : "ขาดทุนสุทธิ"}:</strong> ${fmtBaht(Math.abs(netProfit))} (${fmt(returnPct, 2)}%)</p>
+  `;
+}
+
+function calcPositionSize() {
+  const capital = Number(document.getElementById("posCapital").value) || 0;
+  const riskPct = Number(document.getElementById("posRiskPct").value) || 0;
+  const entry = Number(document.getElementById("posEntry").value) || 0;
+  const stop = Number(document.getElementById("posStop").value) || 0;
+
+  const box = document.getElementById("posResult");
+  box.classList.remove("hidden");
+
+  const riskPerUnit = Math.abs(entry - stop);
+  const riskAmount = capital * (riskPct / 100);
+
+  if (riskPerUnit <= 0) {
+    box.innerHTML = `<p>ราคาเข้าซื้อและราคาตัดขาดทุนต้องไม่เท่ากัน กรุณากรอกใหม่</p>`;
+    return;
+  }
+
+  const units = Math.floor(riskAmount / riskPerUnit);
+  const positionValue = units * entry;
+
+  box.innerHTML = `
+    <p><strong>เงินที่ยอมเสี่ยงสูญเสียได้ต่อครั้ง:</strong> ${fmtBaht(riskAmount)}</p>
+    <p><strong>ความเสี่ยงต่อหน่วย (ราคาเข้า-ตัดขาดทุน):</strong> ${fmtBaht(riskPerUnit, 2)}</p>
+    <p><strong>จำนวนหน่วยที่ควรซื้อ:</strong> ${fmt(units)} หน่วย</p>
+    <p><strong>มูลค่าเงินลงทุนรวมโดยประมาณ:</strong> ${fmtBaht(positionValue)}</p>
+    <p class="source-note">หลักการ Position Sizing ช่วยจำกัดความเสียหายต่อการเทรด/การลงทุนแต่ละครั้งไม่ให้เกินสัดส่วนความเสี่ยงที่ตั้งไว้ ไม่รวมค่าธรรมเนียมและภาษี</p>
+  `;
+}
+
+function calcDividendYield() {
+  const price = Number(document.getElementById("divPrice").value) || 0;
+  const perShare = Number(document.getElementById("divPerShare").value) || 0;
+  const qty = Number(document.getElementById("divQty").value) || 0;
+
+  const box = document.getElementById("divResult");
+  box.classList.remove("hidden");
+
+  if (price <= 0) {
+    box.innerHTML = `<p>กรุณากรอกราคาต่อหน่วยมากกว่า 0</p>`;
+    return;
+  }
+
+  const yieldPct = (perShare / price) * 100;
+  const totalDividend = perShare * qty;
+
+  box.innerHTML = `
+    <p><strong>อัตราผลตอบแทนเงินปันผล (Dividend Yield):</strong> ${fmt(yieldPct, 2)}% ต่อปี</p>
+    <p><strong>เงินปันผลรวมที่ได้รับต่อปี:</strong> ${fmtBaht(totalDividend)}</p>
+    <p class="source-note">คำนวณจากเงินปันผลต่อปีหารด้วยราคาที่ซื้อ ไม่ได้รวมภาษีหัก ณ ที่จ่ายและการเปลี่ยนแปลงของเงินปันผลในอนาคต</p>
+  `;
+}
+
+// อัตราแลกเปลี่ยนโดยประมาณ (คงที่) เทียบกับ 1 USD เพื่อการศึกษาเท่านั้น ไม่ใช่อัตราตลาดจริง
+const FX_PER_USD = { USD: 1, THB: 32.5, EUR: 0.92, JPY: 150 };
+
+function calcFx() {
+  const amount = Number(document.getElementById("fxAmount").value) || 0;
+  const from = document.getElementById("fxFrom").value;
+  const to = document.getElementById("fxTo").value;
+
+  const amountInUsd = amount / FX_PER_USD[from];
+  const converted = amountInUsd * FX_PER_USD[to];
+
+  const box = document.getElementById("fxResult");
+  box.classList.remove("hidden");
+  box.innerHTML = `
+    <p><strong>${fmt(amount, 2)} ${from} ≈ ${fmt(converted, 2)} ${to}</strong></p>
+    <p class="source-note">อัตราโดยประมาณที่ใช้: 1 USD ≈ ${FX_PER_USD.THB} THB, ${FX_PER_USD.EUR} EUR, ${FX_PER_USD.JPY} JPY (ค่าคงที่เพื่อการศึกษา ไม่ใช่อัตราตลาดจริง)</p>
+  `;
+}
+
+function calcInflation() {
+  const amount = Number(document.getElementById("infAmount").value) || 0;
+  const rate = Number(document.getElementById("infRate").value) || 0;
+  const years = Number(document.getElementById("infYears").value) || 0;
+
+  const realValue = amount / Math.pow(1 + rate / 100, years);
+  const lostValue = amount - realValue;
+
+  const box = document.getElementById("infResult");
+  box.classList.remove("hidden");
+  box.innerHTML = `
+    <p><strong>มูลค่าปัจจุบัน:</strong> ${fmtBaht(amount)}</p>
+    <p><strong>มูลค่าที่แท้จริงในอีก ${years} ปี (อำนาจซื้อเทียบปัจจุบัน):</strong> ${fmtBaht(realValue)}</p>
+    <p><strong>มูลค่าที่ลดลงจากเงินเฟ้อ:</strong> ${fmtBaht(lostValue)}</p>
+    <p class="source-note">แสดงให้เห็นว่าเงินสดเฉยๆ จะสูญอำนาจซื้อไปเท่าไรเมื่อเทียบกับอัตราเงินเฟ้อที่สมมติไว้ เป็นเหตุผลหนึ่งที่ควรลงทุนให้ผลตอบแทนชนะเงินเฟ้อ</p>
+  `;
+}
+
 function initCalculators() {
   document.getElementById("dcaBtn").addEventListener("click", calcDCA);
   document.getElementById("ciBtn").addEventListener("click", calcCompoundInterest);
   document.getElementById("goalBtn").addEventListener("click", calcGoal);
+  document.getElementById("tradeBtn").addEventListener("click", calcTrade);
+  document.getElementById("posBtn").addEventListener("click", calcPositionSize);
+  document.getElementById("divBtn").addEventListener("click", calcDividendYield);
+  document.getElementById("fxBtn").addEventListener("click", calcFx);
+  document.getElementById("infBtn").addEventListener("click", calcInflation);
 }
 
 // ===== Strategies tab =====
@@ -392,9 +535,10 @@ async function init() {
   initModal();
   initCalculators();
   try {
-    [INVESTMENTS, STRATEGIES] = await Promise.all([
+    [INVESTMENTS, STRATEGIES, GLOBAL_INVESTMENTS] = await Promise.all([
       loadJSON("data/investments.json"),
       loadJSON("data/strategies.json"),
+      loadJSON("data/global-investments.json"),
     ]);
   } catch (err) {
     document.getElementById("cards").innerHTML =
@@ -404,6 +548,7 @@ async function init() {
     return;
   }
   renderCards();
+  renderGlobalCards();
   renderCompare();
   renderRiskQuiz();
   renderStrategies();

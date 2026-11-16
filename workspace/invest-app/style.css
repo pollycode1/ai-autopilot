@@ -99,6 +99,17 @@ h2 { font-size: 1.15rem; }
 }
 .inv-card:hover { transform: translateY(-2px); border-color: var(--accent2); }
 .inv-card h3 { margin: 0 0 6px; font-size: 1.05rem; }
+.region-tag {
+  display: inline-block;
+  font-size: 0.72rem;
+  color: var(--accent2);
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 999px;
+  padding: 2px 10px;
+  margin-bottom: 8px;
+}
+.modal-content .region-tag { margin-bottom: 4px; }
 .inv-card p { margin: 4px 0; font-size: 0.85rem; color: var(--text-dim); }
 .badge {
   display: inline-block;
