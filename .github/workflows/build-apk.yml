@@ -14,7 +14,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: build-apk
+  group: build-apk-${{ inputs.apps || 'autopilot' }}
   cancel-in-progress: false
 
 jobs:
