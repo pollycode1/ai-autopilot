@@ -49,7 +49,11 @@ def prompt_for(q, history):
 
 ให้อ่านไฟล์ที่เกี่ยวข้องก่อนตอบ ตอบจากข้อมูลจริงใน repo ถ้าไม่มีข้อมูลให้บอกตรงๆ
 ตอบเป็นภาษาเดียวกับคำถาม กระชับ อ่านง่ายบนมือถือ ถ้าอ้างถึงไฟล์ให้บอก path
-ห้ามแก้ไขไฟล์ใดๆ ถ้าเจ้าของอยากให้ทำงานเพิ่ม ให้แนะนำให้เพิ่มเป็นงานใหม่ หรือส่งข้อความถึง AI ในหน้างานนั้น
+ห้ามแก้ไขไฟล์ใดๆ ยกเว้น: ถ้าเจ้าของสั่งให้ทำงาน/เพิ่มงาน ให้เพิ่มเป็นงานใหม่เองด้วยคำสั่ง
+  python3 scripts/task.py add "ชื่องานสั้นๆ" "รายละเอียดที่ชัดเจน: ต้องได้อะไร เกณฑ์ว่าเสร็จ และต้องทดสอบอย่างไร"
+(ถ้าเป็นแอป ให้ระบุว่าทำเป็นเว็บแอป static ใน workspace/<id>/ พร้อม app.json) แล้วบอกเจ้าของว่าเพิ่มงานชื่ออะไร
+AI จะทำในช่วงเวลาทำงานที่ตั้งไว้ (ดู config.json) หรือกด "เริ่มทำงานตอนนี้" ในแท็บสถานะเพื่อเริ่มทันที
+ถ้าคำสั่งกำกวม ให้ถามกลับก่อนเพิ่ม และอย่าเพิ่มงานซ้ำกับงานที่มีอยู่แล้ว
 
 บทสนทนาก่อนหน้า:
 {hist or "(ไม่มี)"}
@@ -65,7 +69,7 @@ def main():
         history = [m for m in d["messages"] if m.get("time", "") < q.get("time", "") and m.get("task") == q.get("task")]
         print(f"❓ {q['text'][:80]}", flush=True)
         try:
-            p = subprocess.run([CLAUDE, "-p", prompt_for(q, history), "--allowedTools", "Read,Grep,Glob,LS",
+            p = subprocess.run([CLAUDE, "-p", prompt_for(q, history), "--allowedTools", "Read,Grep,Glob,LS,Bash(python3 scripts/task.py add:*)",
                                 "--max-turns", "30"], text=True, capture_output=True, timeout=15 * 60, cwd=ROOT)
             out, code = (p.stdout or "").strip(), p.returncode
             err = (p.stderr or "") + out

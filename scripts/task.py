@@ -6,6 +6,7 @@
   python3 scripts/task.py plan <id> "ขั้นที่ 1" "ขั้นที่ 2" ...   (ตั้งแผนใหม่ทั้งหมด)
   python3 scripts/task.py step <id> <ลำดับขั้น เริ่มที่ 1>         (ติ๊กว่าขั้นนั้นเสร็จ)
   python3 scripts/task.py log <id> "ข้อความ"
+  python3 scripts/task.py add "ชื่องาน" "รายละเอียด"              (เพิ่มงานใหม่)
 """
 import sys, json
 sys.path.insert(0, __import__("os").path.dirname(__file__))
@@ -15,7 +16,15 @@ def main(argv):
     if len(argv) < 2:
         raise SystemExit(__doc__)
     cmd, tid, rest = argv[0], argv[1], argv[2:]
-    data = load(); t = find(data, tid)
+    data = load()
+    if cmd == "add":
+        import re, time
+        slug = re.sub(r"[^a-z0-9]+", "-", tid.lower()).strip("-")[:24] or "task"
+        nid = f"{slug}-{int(time.time()) % 100000}"
+        data["tasks"].append({"id": nid, "title": tid, "detail": " ".join(rest), "status": "todo",
+                              "plan": [], "log": [], "created": now(), "updated": now()})
+        save(data); print(nid); return
+    t = find(data, tid)
     if cmd == "show":
         print(json.dumps(t, ensure_ascii=False, indent=2)); return
     if cmd == "status":
