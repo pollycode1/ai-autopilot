@@ -17,7 +17,15 @@ def load_chat():
 def save_chat(d):
     CHAT.write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
+def repo_name():
+    full = os.environ.get("GITHUB_REPOSITORY", "")
+    if not full:
+        url = subprocess.run(["git", "config", "--get", "remote.origin.url"], text=True, capture_output=True, cwd=ROOT).stdout.strip()
+        full = url.split("github.com")[-1].lstrip(":/").removesuffix(".git")
+    return full
+
 def prompt_for(q, history):
+    full = repo_name(); owner, _, name = full.partition("/")
     tasks = json.loads((ROOT / "tasks.json").read_text(encoding="utf-8"))["tasks"]
     scope = q.get("task")
     if scope:
@@ -30,6 +38,14 @@ def prompt_for(q, history):
     return f"""คุณคือผู้ช่วยตอบคำถามเกี่ยวกับงานที่ระบบ AI Autopilot ทำให้เจ้าของ
 ข้อมูลอยู่ใน repo นี้: tasks.json (รายการงาน สถานะ แผน และบันทึกการทำงาน) และ workspace/<id งาน>/ (ไฟล์ผลงาน)
 {where}
+
+ความรู้เกี่ยวกับระบบ (ใช้ตอบได้เลย):
+- งานที่เป็นแอป (มี workspace/<id>/index.html) ระบบสร้างไฟล์ APK ให้อัตโนมัติทุกครั้งที่มีการแก้ไข
+  ดาวน์โหลดได้ที่ https://github.com/{full}/releases/download/apps/<id>.apk (รวมทุกแอป: https://github.com/{full}/releases/tag/apps)
+- เปิดผ่านเว็บได้ที่ https://{owner}.github.io/{name}/workspace/<id>/
+- ในแอปที่ติดตั้งจาก APK มีปุ่ม 🔧 มุมขวาล่าง ใส่ key (GitHub token) แล้วพิมพ์สิ่งที่อยากให้ AI อัปเดต AI จะทำให้ทันที
+  และเมื่อออนไลน์ แอปจะเปิดเวอร์ชันล่าสุดเอง ถ้ามี APK ใหม่จะมีแถบแจ้งเตือนด้านบน
+- สั่งให้ AI ทำงานเพิ่ม: เพิ่มงานใหม่ในแท็บ "งาน" หรือส่งข้อความถึง AI ในหน้างานนั้น แล้วกด "เริ่มทำงานตอนนี้" ในแท็บสถานะ
 
 ให้อ่านไฟล์ที่เกี่ยวข้องก่อนตอบ ตอบจากข้อมูลจริงใน repo ถ้าไม่มีข้อมูลให้บอกตรงๆ
 ตอบเป็นภาษาเดียวกับคำถาม กระชับ อ่านง่ายบนมือถือ ถ้าอ้างถึงไฟล์ให้บอก path
