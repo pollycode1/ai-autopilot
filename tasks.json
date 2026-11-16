@@ -93,6 +93,17 @@
       "created": "2026-11-16T03:36:52Z",
       "updated": "2026-11-16T03:41:12Z",
       "deleted": true
+    },
+    {
+      "id": "tmwiss62o",
+      "project": "invest-app",
+      "title": "รวบรวมการลงทุนทั่วโลก และมีเครื่องมือทำกำไรแบบครบครัน",
+      "detail": "",
+      "status": "todo",
+      "plan": [],
+      "log": [],
+      "created": "2026-11-16T05:03:00Z",
+      "updated": "2026-11-16T05:03:00Z"
     }
   ]
 }
