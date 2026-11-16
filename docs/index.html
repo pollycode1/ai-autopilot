@@ -229,7 +229,7 @@ function vChat() {
       const d = await mutate("chat.json", x => { (x.messages ||= []).push({ id, time: nowIso(), by: "user", task: scope || null, text, status: "pending" }); }, "app: ถามคำถาม", chatDefault);
       state.chat = d.messages; $("#q").value = "";
       await gh(`/actions/workflows/ask.yml/dispatches`, { method: "POST", body: JSON.stringify({ ref: S.branch || "main" }) })
-        .catch(e => toast(e.status === 403 ? "Token ไม่มีสิทธิ์ Actions — คำถามจะถูกตอบในรอบถัดไป" : "สั่งตอบไม่สำเร็จ: " + e.message));
+        .catch(() => {});  // ถ้าสั่งไม่ได้ ระบบจะเริ่มตอบเองจากการบันทึก chat.json
     } catch (e) { toast(e.message); }
     vChat(); window.scrollTo(0, document.body.scrollHeight);
   };
