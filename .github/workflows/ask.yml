@@ -2,6 +2,9 @@ name: Ask AI
 
 on:
   workflow_dispatch: {}     # แอปสั่งเมื่อมีคำถามใหม่
+  push:                     # หรือเมื่อแอปบันทึกคำถามลง chat.json (ใช้ได้แม้ token ไม่มีสิทธิ์ Actions)
+    branches: [main]
+    paths: ["chat.json"]
 
 concurrency:
   group: ask-ai
