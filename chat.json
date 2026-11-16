@@ -41,6 +41,14 @@
       "task": "invest-app",
       "text": "เพิ่มเป็นงานใหม่เลย",
       "status": "pending"
+    },
+    {
+      "id": "qmwipecdt",
+      "time": "2026-11-16T03:28:16Z",
+      "by": "user",
+      "task": "invest-app",
+      "text": "เพิ่มให้เลย",
+      "status": "pending"
     }
   ]
 }
