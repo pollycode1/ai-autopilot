@@ -3,7 +3,7 @@
 import json, os, re, subprocess, sys, time, datetime, pathlib
 from zoneinfo import ZoneInfo
 sys.path.insert(0, os.path.dirname(__file__))
-from tasklib import ROOT, load, save, find, now, merge, merge_chat, project_of, project_name
+from tasklib import ROOT, load, save, find, now, merge, merge_chat, project_of, project_name, valid_model
 
 LIMIT_RE = re.compile(r"usage limit|session limit|weekly limit|rate[ _-]?limit|limit reached|hit your .{0,20}limit|\b429\b|overloaded|quota|credit balance|\bresets?\b|try again later", re.I)
 MAX_WAIT_MIN = int(os.environ.get("MAX_LIMIT_WAIT_MINUTES", "120"))  # รอ limit รีเซ็ตในรอบเดียวกันได้นานสุดกี่นาที
@@ -67,7 +67,7 @@ MODEL_ERR_RE = re.compile(r"model.{0,40}(not found|not available|invalid|unsuppo
 def call_claude(prompt, minutes, model=""):
     """เรียก Claude Code หนึ่งครั้ง (model ว่าง = ใช้ค่าเริ่มต้นของ Claude Code)"""
     cmd = [CLAUDE, "-p", prompt, "--dangerously-skip-permissions", "--max-turns", os.environ.get("MAX_TURNS", "150")]
-    if model:
+    if model and valid_model(model):   # รับเฉพาะชื่อโมเดลที่อนุญาต กันค่าแปลกๆ ถูกตีความเป็น option อื่น
         cmd += ["--model", model]
     try:
         p = subprocess.run(cmd, text=True, capture_output=True, timeout=minutes * 60)
@@ -193,17 +193,25 @@ def work():
             sync(f"autopilot: พักงาน {tid}"); return 0
         set_lock(tid, True)
         sync(f"autopilot: เริ่ม {task.get('title', tid)[:40]}")
+        task = find(load(), tid)  # โหลดใหม่หลังซิงก์ เผื่อผู้ใช้เพิ่งเปลี่ยนโมเดล/รายละเอียด
         minutes = int(min(SESSION_MIN, left - 2))
         print(f"▶ ทำงาน {tid}: {task.get('title')} ({minutes} นาที)", flush=True)
         prompt = (ROOT / "prompts/agent.md").read_text(encoding="utf-8") \
             .replace("{TASK_ID}", tid).replace("{MINUTES}", str(minutes)) \
             .replace("{PROJECT}", project_of(task)).replace("{PROJECT_NAME}", project_name(load(), project_of(task)))
         model = (task.get("model") or cfg.get("default_model") or "").strip()
+        if not valid_model(model):
+            add_log(tid, f"⚠️ ชื่อโมเดล '{model[:40]}' ไม่ถูกต้อง — ใช้โมเดลค่าเริ่มต้นแทน"); model = ""
+        t0 = time.time()
         print(f"   โมเดล: {model or 'ค่าเริ่มต้นของ Claude Code'}", flush=True)
         out, code = call_claude(prompt, minutes, model)
         if code != 0 and model and MODEL_ERR_RE.search(out) and not LIMIT_RE.search(out):
             add_log(tid, f"⚠️ ใช้โมเดล {model} ไม่ได้ (แพ็กเกจอาจไม่รองรับ) — เปลี่ยนไปใช้โมเดลค่าเริ่มต้นแทน")
-            out, code = call_claude(prompt, minutes, "")
+            remain = int(minutes - (time.time() - t0) / 60)
+            if remain >= 3:
+                out, code = call_claude(prompt, remain, "")
+            else:
+                out, code = "timeout", 124
         print(out[-3000:], flush=True)
         if code != 0 and LIMIT_RE.search(out):
             line = next((l for l in out.splitlines() if LIMIT_RE.search(l)), "")[:200]

@@ -189,7 +189,7 @@ function vTasks() {
         ${g.tasks.map(t => { const n=(t.plan||[]).length, d=(t.plan||[]).filter(s=>s.done).length; return `
           <div class="task" data-id="${esc(t.id)}" style="border-top:1px solid var(--line);padding:10px 0 4px">
             <div class="row"><span class="grow">${esc(t.title)}</span><span class="badge s-${esc(t.status)}">${LABEL[t.status]||esc(t.status)}</span></div>
-            <div class="mute">${n ? `${d}/${n} ขั้นตอน · ` : ""}${t.model ? `🧠 ${esc(modelName(t.model))} · ` : ""}อัปเดต ${fmt(t.updated)}</div>
+            <div class="mute">${n ? `${d}/${n} ขั้นตอน · ` : ""}${t.model ? `🧠 ${esc(modelName(t.model))} · ` : state.config?.default_model ? `🧠 ${esc(modelName(state.config.default_model))} (หลัก) · ` : ""}อัปเดต ${fmt(t.updated)}</div>
             ${n && t.status !== "done" ? `<div class="progress"><i style="width:${Math.round(d/n*100)}%"></i></div>` : ""}
           </div>`; }).join("")}
       </div>`; }).join("")}`;
@@ -208,10 +208,10 @@ function vTasks() {
       const d = await mutate("tasks.json", x => {
         x.projects ||= [];
         if (pname) x.projects.push({ id: pid, name: pname, created: nowIso() });
-        x.tasks.push({ id, project: pid, title, detail, model, status: "todo", plan: [], log: [], created: nowIso(), updated: nowIso() });
+        x.tasks.push({ id, project: pid, title, detail, model, model_at: nowIso(), status: "todo", plan: [], log: [], created: nowIso(), updated: nowIso() });
       }, `app: เพิ่มงาน ${title}`);
       state.tasks = d.tasks.filter(x => !x.deleted); state.projects = d.projects || []; state.newProj = pid;
-      $("#nt").value = ""; $("#nd").value = ""; $("#np").value = "";
+      $("#nt").value = ""; $("#nd").value = ""; $("#np").value = ""; $("#nm").value = "";
       if (runNow) await runProject(pid); else toast("เพิ่มงานแล้ว AI จะทำในช่วงเวลาที่ตั้งไว้");
     } catch (e) { toast(e.message); }
     render();
@@ -253,7 +253,8 @@ function vTask(t) {
   const upd = (fn, msg, ok) => mutate("tasks.json", x => { const it = x.tasks.find(y => y.id === t.id); fn(it); it.updated = nowIso(); }, msg)
     .then(d => { state.tasks = d.tasks.filter(x => !x.deleted); toast(ok); render(); }).catch(e => toast(e.message));
   $("#back").onclick = () => { state.open = null; render(); };
-  $("#tm").onchange = e => upd(it => { it.model = e.target.value; }, "app: เปลี่ยนโมเดล", "เปลี่ยนโมเดลแล้ว — มีผลตั้งแต่รอบถัดไป");
+  $("#tm").onchange = e => { (state.modelSel ||= {})[t.id] = e.target.value;
+    upd(it => { it.model = state.modelSel[t.id]; it.model_at = nowIso(); }, "app: เปลี่ยนโมเดล", "เปลี่ยนโมเดลแล้ว — มีผลตั้งแต่รอบถัดไป"); };
   loadApks(() => state.open === t.id && render());
   $("#askt").onclick = () => { state.chatScope = projOf(t); state.open = null; state.tab = "chat"; render(); };
   $("#send").onclick = () => { const m = $("#msg").value.trim(); if (!m) return;
@@ -315,7 +316,8 @@ function vChat() {
 function vSchedule() {
   const v = $("#view"), c = state.config;
   if (!c) { v.innerHTML = `<p class="mute">กำลังโหลด…</p>`; return; }
-  const draft = state.draft ||= JSON.parse(JSON.stringify(c));
+  if (!state.draft) { state.draft = JSON.parse(JSON.stringify(c)); state.draftBase = JSON.parse(JSON.stringify(c)); }
+  const draft = state.draft;
   v.innerHTML = `
     <div class="card">
       <div class="row"><b class="grow">ให้ AI ทำงานอัตโนมัติ</b>
@@ -343,7 +345,8 @@ function vSchedule() {
   document.querySelectorAll("[data-rm]").forEach(el => el.onclick = () => { draft.windows.splice(+el.dataset.rm, 1); render(); });
   $("#addw").onclick = () => { draft.windows.push({ days:[1,2,3,4,5], start:"09:00", end:"17:00" }); render(); };
   $("#savew").onclick = async () => {
-    try { const d = await mutate("config.json", x => { x.enabled = draft.enabled; x.windows = draft.windows; x.default_model = draft.default_model || ""; x.timezone ||= "Asia/Bangkok"; }, "app: ตั้งช่วงเวลา");
+    try { const d = await mutate("config.json", x => { const base = state.draftBase || {}, same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+      for (const k of ["enabled", "windows", "default_model"]) if (!same(draft[k], base[k])) x[k] = draft[k] ?? ""; x.timezone ||= "Asia/Bangkok"; }, "app: ตั้งช่วงเวลา");
       state.config = d; state.draft = null; toast("บันทึกช่วงเวลาแล้ว"); render(); } catch (e) { toast(e.message); }
   };
 }
