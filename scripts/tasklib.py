@@ -3,6 +3,12 @@ import json, datetime, pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 TASKS = ROOT / "tasks.json"
+MODEL_RE = __import__("re").compile(r"^(sonnet|opus|haiku|claude-[a-z0-9][a-z0-9.\-]*)$")
+
+def valid_model(m):
+    """โมเดลที่อนุญาต: sonnet / opus / haiku หรือชื่อเต็ม claude-… (ว่าง = ค่าเริ่มต้น)"""
+    return not m or bool(MODEL_RE.match(m))
+
 STATUSES = ["todo", "planning", "doing", "testing", "done", "blocked"]
 
 def now():
@@ -50,6 +56,10 @@ def merge(a, b):
             win = t if t.get("updated", "") > cur.get("updated", "") else cur
             win = dict(win)
             win["log"] = sorted(logs.values(), key=lambda l: l.get("time", ""))
+            # โมเดลที่ผู้ใช้เลือก: ใช้ค่าที่เปลี่ยนล่าสุด (model_at) ไม่ให้การอัปเดตสถานะของตัวรันเขียนทับ
+            mt = max((cur, t), key=lambda x: x.get("model_at", ""))
+            if "model" in mt or "model_at" in mt:
+                win["model"] = mt.get("model", ""); win["model_at"] = mt.get("model_at", "")
             if cur.get("deleted") or t.get("deleted"):
                 win["deleted"] = True
             out[tid] = win

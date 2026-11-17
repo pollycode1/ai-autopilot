@@ -2,7 +2,7 @@
 """ตอบคำถามที่ค้างอยู่ใน chat.json โดยให้ Claude อ่านข้อมูลงานใน repo (อ่านอย่างเดียว)"""
 import json, os, subprocess, sys
 sys.path.insert(0, os.path.dirname(__file__))
-from tasklib import ROOT, now
+from tasklib import ROOT, now, valid_model
 import run  # ใช้ sync() และ LIMIT_RE
 
 CHAT = ROOT / "chat.json"
@@ -73,8 +73,18 @@ def main():
         history = [m for m in d["messages"] if m.get("time", "") < q.get("time", "") and m.get("task") == q.get("task")]
         print(f"❓ {q['text'][:80]}", flush=True)
         try:
-            p = subprocess.run([CLAUDE, "-p", prompt_for(q, history), "--allowedTools", "Read,Grep,Glob,LS,Bash(python3 scripts/task.py add:*),Bash(python3 scripts/task.py projects)",
-                                "--max-turns", "30"], text=True, capture_output=True, timeout=15 * 60, cwd=ROOT)
+            cfg = json.loads((ROOT / "config.json").read_text(encoding="utf-8"))
+            model = cfg.get("default_model") or ""
+            prompt = prompt_for(q, history)
+            def ask_once(m):
+                mflag = ["--model", m] if m and valid_model(m) else []
+                return subprocess.run([CLAUDE, "-p", prompt, *mflag, "--allowedTools", "Read,Grep,Glob,LS,Bash(python3 scripts/task.py add:*),Bash(python3 scripts/task.py projects)",
+                                       "--max-turns", "30"], text=True, capture_output=True, timeout=15 * 60, cwd=ROOT)
+            p = ask_once(model)
+            if p.returncode != 0 and model and run.MODEL_ERR_RE.search((p.stderr or "") + (p.stdout or "")) \
+                    and not run.LIMIT_RE.search((p.stderr or "") + (p.stdout or "")):
+                print(f"ใช้โมเดล {model} ไม่ได้ — ลองใหม่ด้วยค่าเริ่มต้น")
+                p = ask_once("")
             out, code = (p.stdout or "").strip(), p.returncode
             err = (p.stderr or "") + out
         except subprocess.TimeoutExpired:

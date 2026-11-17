@@ -51,7 +51,7 @@ nav button.on{color:var(--acc);font-weight:600}
 <nav id="nav">
   <button data-tab="tasks" class="on">📋 งาน</button>
   <button data-tab="chat">💬 ถาม</button>
-  <button data-tab="schedule">⏰ เวลา</button>
+  <button data-tab="schedule">⏰ เวลา/AI</button>
   <button data-tab="runs">⚙️ สถานะ</button>
   <button data-tab="settings">🔑 ตั้งค่า</button>
 </nav>
@@ -61,6 +61,14 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const LABEL = {todo:"รอทำ",planning:"กำลังวิเคราะห์",doing:"กำลังทำ",testing:"กำลังทดสอบ",done:"เสร็จแล้ว",blocked:"ต้องการคุณ"};
 const DAYS = ["อา","จ","อ","พ","พฤ","ศ","ส"];
+const MODELS = [
+  ["sonnet", "Sonnet — สมดุล เก่งงานทั่วไปและเขียนโค้ด (แนะนำ)"],
+  ["opus", "Opus — เก่งที่สุด งานยาก/ซับซ้อน ใช้โควตาเร็วกว่า"],
+  ["haiku", "Haiku — เร็วและประหยัดโควตา งานง่าย"],
+];
+const modelName = m => m ? (MODELS.find(x => x[0] === m) || [m, m])[1].split(" — ")[0] : "";
+const modelOpts = (sel, dflt) => `<option value="">${esc(dflt)}</option>` +
+  MODELS.map(([v, l]) => `<option value="${v}" ${v === sel ? "selected" : ""}>${esc(l)}</option>`).join("");
 const nowIso = () => new Date().toISOString().replace(/\.\d+Z$/, "Z");
 const fmt = iso => iso ? new Date(iso).toLocaleString("th-TH", {dateStyle:"short", timeStyle:"short"}) : "";
 
@@ -152,7 +160,7 @@ function vTasks() {
   const sel = state.newProj ?? (projects.length ? projects[0].id : "__new");
   const groups = projects.map(p => ({ ...p, tasks: state.tasks.filter(t => projOf(t) === p.id).sort((a,b) => (order[a.status]??2) - (order[b.status]??2)) }))
     .sort((a, b) => Math.min(...a.tasks.map(t => order[t.status]??2)) - Math.min(...b.tasks.map(t => order[t.status]??2)));
-  const draft = { nt: $("#nt")?.value || "", nd: $("#nd")?.value || "", np: $("#np")?.value || "" };
+  const draft = { nt: $("#nt")?.value || "", nd: $("#nd")?.value || "", np: $("#np")?.value || "", nm: $("#nm")?.value || "" };
   v.innerHTML = `
     <div class="card">
       <label for="ps" style="margin-top:0">โปรเจค</label>
@@ -163,6 +171,8 @@ function vTasks() {
       <input id="nt" placeholder="${sel === "__new" ? "เช่น ทำแอปจดรายรับรายจ่ายแบบง่าย" : "เช่น เพิ่มหน้ากราฟสรุปรายเดือน"}">
       <label for="nd">รายละเอียด (ไม่บังคับ)</label>
       <textarea id="nd" placeholder="เป้าหมาย ความต้องการ ข้อจำกัด ตัวอย่างที่ชอบ…"></textarea>
+      <label for="nm">โมเดล AI</label>
+      <select id="nm">${modelOpts(draft.nm, "ใช้โมเดลหลัก" + (state.config?.default_model ? ` (${modelName(state.config.default_model)})` : " (ค่าเริ่มต้น)"))}</select>
       <div class="row" style="margin-top:10px"><label class="row" style="margin:0;color:var(--ink)"><input type="checkbox" id="now" style="width:20px;height:20px"> ทำทันที</label>
         <span class="grow"></span><button class="primary" id="add">+ เพิ่มงาน</button></div>
     </div>
@@ -179,7 +189,7 @@ function vTasks() {
         ${g.tasks.map(t => { const n=(t.plan||[]).length, d=(t.plan||[]).filter(s=>s.done).length; return `
           <div class="task" data-id="${esc(t.id)}" style="border-top:1px solid var(--line);padding:10px 0 4px">
             <div class="row"><span class="grow">${esc(t.title)}</span><span class="badge s-${esc(t.status)}">${LABEL[t.status]||esc(t.status)}</span></div>
-            <div class="mute">${n ? `${d}/${n} ขั้นตอน · ` : ""}อัปเดต ${fmt(t.updated)}</div>
+            <div class="mute">${n ? `${d}/${n} ขั้นตอน · ` : ""}${t.model ? `🧠 ${esc(modelName(t.model))} · ` : state.config?.default_model ? `🧠 ${esc(modelName(state.config.default_model))} (หลัก) · ` : ""}อัปเดต ${fmt(t.updated)}</div>
             ${n && t.status !== "done" ? `<div class="progress"><i style="width:${Math.round(d/n*100)}%"></i></div>` : ""}
           </div>`; }).join("")}
       </div>`; }).join("")}`;
@@ -189,7 +199,7 @@ function vTasks() {
   document.querySelectorAll("[data-addp]").forEach(b => b.onclick = () => { state.newProj = b.dataset.addp; vTasks(); window.scrollTo(0, 0); $("#nt").focus(); });
   $("#add").onclick = async () => {
     const title = $("#nt").value.trim(); if (!title) return toast("ใส่สิ่งที่อยากให้ทำก่อน");
-    const detail = $("#nd").value.trim(), runNow = $("#now").checked;
+    const detail = $("#nd").value.trim(), runNow = $("#now").checked, model = $("#nm").value;
     let pid = $("#ps").value, pname = null;
     if (pid === "__new") { pname = $("#np").value.trim() || title; pid = "p" + Date.now().toString(36); }
     $("#add").disabled = true;
@@ -198,10 +208,10 @@ function vTasks() {
       const d = await mutate("tasks.json", x => {
         x.projects ||= [];
         if (pname) x.projects.push({ id: pid, name: pname, created: nowIso() });
-        x.tasks.push({ id, project: pid, title, detail, status: "todo", plan: [], log: [], created: nowIso(), updated: nowIso() });
+        x.tasks.push({ id, project: pid, title, detail, model, model_at: nowIso(), status: "todo", plan: [], log: [], created: nowIso(), updated: nowIso() });
       }, `app: เพิ่มงาน ${title}`);
       state.tasks = d.tasks.filter(x => !x.deleted); state.projects = d.projects || []; state.newProj = pid;
-      $("#nt").value = ""; $("#nd").value = ""; $("#np").value = "";
+      $("#nt").value = ""; $("#nd").value = ""; $("#np").value = ""; $("#nm").value = "";
       if (runNow) await runProject(pid); else toast("เพิ่มงานแล้ว AI จะทำในช่วงเวลาที่ตั้งไว้");
     } catch (e) { toast(e.message); }
     render();
@@ -218,6 +228,8 @@ function vTask(t) {
       <div class="row"><h2 class="grow" style="margin:0;font-size:20px">${esc(t.title)}</h2><span class="badge s-${esc(t.status)}">${LABEL[t.status]||esc(t.status)}</span></div>
       <div class="mute">📁 ${esc((projList().find(p => p.id === projOf(t)) || {}).name || projOf(t))}</div>
       ${t.detail ? `<p style="white-space:pre-wrap">${esc(t.detail)}</p>` : ""}
+      <label for="tm">🧠 โมเดล AI ของงานนี้</label>
+      <select id="tm">${modelOpts(t.model || "", "ใช้โมเดลหลัก" + (state.config?.default_model ? ` (${modelName(state.config.default_model)})` : " (ค่าเริ่มต้น)"))}</select>
       <div class="row"><a class="btn" href="https://${esc(S.owner)}.github.io/${esc(S.repo)}/workspace/${esc(projOf(t))}/" target="_blank" rel="noopener">🌐 เปิดดูผลงาน</a>
       <button id="askt">💬 ถามเกี่ยวกับโปรเจคนี้</button>
       ${(state.apks||{})[projOf(t)] ? `<a class="btn" href="${esc(state.apks[projOf(t)])}">📱 ดาวน์โหลด APK</a>` : ""}
@@ -241,6 +253,8 @@ function vTask(t) {
   const upd = (fn, msg, ok) => mutate("tasks.json", x => { const it = x.tasks.find(y => y.id === t.id); fn(it); it.updated = nowIso(); }, msg)
     .then(d => { state.tasks = d.tasks.filter(x => !x.deleted); toast(ok); render(); }).catch(e => toast(e.message));
   $("#back").onclick = () => { state.open = null; render(); };
+  $("#tm").onchange = e => { (state.modelSel ||= {})[t.id] = e.target.value;
+    upd(it => { it.model = state.modelSel[t.id]; it.model_at = nowIso(); }, "app: เปลี่ยนโมเดล", "เปลี่ยนโมเดลแล้ว — มีผลตั้งแต่รอบถัดไป"); };
   loadApks(() => state.open === t.id && render());
   $("#askt").onclick = () => { state.chatScope = projOf(t); state.open = null; state.tab = "chat"; render(); };
   $("#send").onclick = () => { const m = $("#msg").value.trim(); if (!m) return;
@@ -302,11 +316,14 @@ function vChat() {
 function vSchedule() {
   const v = $("#view"), c = state.config;
   if (!c) { v.innerHTML = `<p class="mute">กำลังโหลด…</p>`; return; }
-  const draft = state.draft ||= JSON.parse(JSON.stringify(c));
+  if (!state.draft) { state.draft = JSON.parse(JSON.stringify(c)); state.draftBase = JSON.parse(JSON.stringify(c)); }
+  const draft = state.draft;
   v.innerHTML = `
     <div class="card">
       <div class="row"><b class="grow">ให้ AI ทำงานอัตโนมัติ</b>
         <label class="row" style="margin:0;color:var(--ink)"><input type="checkbox" id="en" style="width:22px;height:22px" ${draft.enabled!==false?"checked":""}> เปิด</label></div>
+      <label for="dm">🧠 โมเดลหลัก (ใช้กับทุกงานที่ไม่ได้เลือกโมเดลเอง และหน้าถาม)</label>
+      <select id="dm">${modelOpts(draft.default_model || "", "ค่าเริ่มต้นของ Claude Code")}</select>
       <p class="mute">AI จะทำงานเฉพาะในช่วงเวลาด้านล่าง (เวลาไทย) ระบบเช็กทุกชั่วโมง ถ้าติด limit จะพักแล้วกลับมาทำต่อเอง</p>
     </div>
     ${draft.windows.map((w,i) => `
@@ -321,13 +338,15 @@ function vSchedule() {
       </div>`).join("")}
     <div class="row"><button id="addw">+ เพิ่มช่วงเวลา</button><span class="grow"></span><button class="primary" id="savew">บันทึก</button></div>`;
   $("#en").onchange = e => draft.enabled = e.target.checked;
+  $("#dm").onchange = e => draft.default_model = e.target.value;
   document.querySelectorAll(".day").forEach(el => el.onclick = () => { const w = draft.windows[el.dataset.w], d = +el.dataset.d;
     w.days = w.days.includes(d) ? w.days.filter(x => x !== d) : [...w.days, d].sort(); render(); });
   document.querySelectorAll("input[type=time]").forEach(el => el.onchange = () => { draft.windows[el.dataset.w][el.dataset.k] = el.value; render(); });
   document.querySelectorAll("[data-rm]").forEach(el => el.onclick = () => { draft.windows.splice(+el.dataset.rm, 1); render(); });
   $("#addw").onclick = () => { draft.windows.push({ days:[1,2,3,4,5], start:"09:00", end:"17:00" }); render(); };
   $("#savew").onclick = async () => {
-    try { const d = await mutate("config.json", x => { x.enabled = draft.enabled; x.windows = draft.windows; x.timezone ||= "Asia/Bangkok"; }, "app: ตั้งช่วงเวลา");
+    try { const d = await mutate("config.json", x => { const base = state.draftBase || {}, same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+      for (const k of ["enabled", "windows", "default_model"]) if (!same(draft[k], base[k])) x[k] = draft[k] ?? ""; x.timezone ||= "Asia/Bangkok"; }, "app: ตั้งช่วงเวลา");
       state.config = d; state.draft = null; toast("บันทึกช่วงเวลาแล้ว"); render(); } catch (e) { toast(e.message); }
   };
 }
