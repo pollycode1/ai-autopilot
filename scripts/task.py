@@ -9,6 +9,8 @@
   python3 scripts/task.py projects                                (ดูรายชื่อโปรเจค)
   python3 scripts/task.py add "ชื่องาน" "รายละเอียด" --project <id โปรเจคเดิม>
   python3 scripts/task.py add "ชื่องาน" "รายละเอียด" --new-project "ชื่อโปรเจคใหม่"
+      (ใส่ --model <sonnet|opus|haiku> เพิ่มได้ ถ้าต้องการเลือกโมเดลของงานนี้)
+  python3 scripts/task.py model <id> <sonnet|opus|haiku|default>
 """
 import sys, json
 sys.path.insert(0, __import__("os").path.dirname(__file__))
@@ -28,6 +30,9 @@ def main(argv):
     data = load()
     if cmd == "add":
         project = None
+        model = ""
+        if "--model" in rest:
+            k = rest.index("--model"); model = rest[k + 1]; del rest[k:k + 2]
         if "--project" in rest:
             k = rest.index("--project"); project = rest[k + 1]; del rest[k:k + 2]
         if "--new-project" in rest:
@@ -43,7 +48,7 @@ def main(argv):
         if not project:
             project = nid
             data["projects"].append({"id": project, "name": tid, "created": now()})
-        data["tasks"].append({"id": nid, "project": project, "title": tid, "detail": " ".join(rest), "status": "todo",
+        data["tasks"].append({"id": nid, "project": project, "title": tid, "detail": " ".join(rest), "status": "todo", "model": "" if model == "default" else model,
                               "plan": [], "log": [], "created": now(), "updated": now()})
         save(data); print(nid); return
     t = find(data, tid)
@@ -59,6 +64,8 @@ def main(argv):
     elif cmd == "step":
         i = int(rest[0]) - 1
         t["plan"][i]["done"] = True
+    elif cmd == "model":
+        t["model"] = "" if (not rest or rest[0] == "default") else rest[0]
     elif cmd == "log":
         t.setdefault("log", []).append({"time": now(), "by": "ai", "text": " ".join(rest)})
     else:

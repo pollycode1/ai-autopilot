@@ -73,7 +73,9 @@ def main():
         history = [m for m in d["messages"] if m.get("time", "") < q.get("time", "") and m.get("task") == q.get("task")]
         print(f"❓ {q['text'][:80]}", flush=True)
         try:
-            p = subprocess.run([CLAUDE, "-p", prompt_for(q, history), "--allowedTools", "Read,Grep,Glob,LS,Bash(python3 scripts/task.py add:*),Bash(python3 scripts/task.py projects)",
+            cfg = json.loads((ROOT / "config.json").read_text(encoding="utf-8"))
+            mflag = ["--model", cfg["default_model"]] if cfg.get("default_model") else []
+            p = subprocess.run([CLAUDE, "-p", prompt_for(q, history), *mflag, "--allowedTools", "Read,Grep,Glob,LS,Bash(python3 scripts/task.py add:*),Bash(python3 scripts/task.py projects)",
                                 "--max-turns", "30"], text=True, capture_output=True, timeout=15 * 60, cwd=ROOT)
             out, code = (p.stdout or "").strip(), p.returncode
             err = (p.stderr or "") + out

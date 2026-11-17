@@ -61,6 +61,20 @@ def window_minutes_left(cfg, at=None):
                 best = max(best, int((e - at).total_seconds() // 60))
     return best
 
+MODEL_ERR_RE = re.compile(r"model.{0,40}(not found|not available|invalid|unsupported|does not exist|not supported|access)|"
+                          r"(invalid|unknown|unsupported).{0,20}model|not_found_error", re.I)
+
+def call_claude(prompt, minutes, model=""):
+    """เรียก Claude Code หนึ่งครั้ง (model ว่าง = ใช้ค่าเริ่มต้นของ Claude Code)"""
+    cmd = [CLAUDE, "-p", prompt, "--dangerously-skip-permissions", "--max-turns", os.environ.get("MAX_TURNS", "150")]
+    if model:
+        cmd += ["--model", model]
+    try:
+        p = subprocess.run(cmd, text=True, capture_output=True, timeout=minutes * 60)
+        return (p.stdout or "") + (p.stderr or ""), p.returncode
+    except subprocess.TimeoutExpired:
+        return "timeout", 124
+
 def locked_by_other(data, project):
     """โปรเจคนี้กำลังถูกรอบอื่นทำอยู่ไหม (กันสองรอบแก้ไฟล์เดียวกันพร้อมกัน)"""
     cutoff = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=LOCK_MIN)).isoformat(timespec="seconds").replace("+00:00", "Z")
@@ -184,13 +198,12 @@ def work():
         prompt = (ROOT / "prompts/agent.md").read_text(encoding="utf-8") \
             .replace("{TASK_ID}", tid).replace("{MINUTES}", str(minutes)) \
             .replace("{PROJECT}", project_of(task)).replace("{PROJECT_NAME}", project_name(load(), project_of(task)))
-        try:
-            p = subprocess.run([CLAUDE, "-p", prompt, "--dangerously-skip-permissions",
-                                "--max-turns", os.environ.get("MAX_TURNS", "150")],
-                               text=True, capture_output=True, timeout=minutes * 60)
-            out, code = (p.stdout or "") + (p.stderr or ""), p.returncode
-        except subprocess.TimeoutExpired:
-            out, code = "timeout", 124
+        model = (task.get("model") or cfg.get("default_model") or "").strip()
+        print(f"   โมเดล: {model or 'ค่าเริ่มต้นของ Claude Code'}", flush=True)
+        out, code = call_claude(prompt, minutes, model)
+        if code != 0 and model and MODEL_ERR_RE.search(out) and not LIMIT_RE.search(out):
+            add_log(tid, f"⚠️ ใช้โมเดล {model} ไม่ได้ (แพ็กเกจอาจไม่รองรับ) — เปลี่ยนไปใช้โมเดลค่าเริ่มต้นแทน")
+            out, code = call_claude(prompt, minutes, "")
         print(out[-3000:], flush=True)
         if code != 0 and LIMIT_RE.search(out):
             line = next((l for l in out.splitlines() if LIMIT_RE.search(l)), "")[:200]
