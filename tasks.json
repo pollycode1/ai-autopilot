@@ -4,6 +4,11 @@
       "id": "invest-app",
       "name": "คลังความรู้ลงทุน",
       "created": "2026-11-15T18:21:00Z"
+    },
+    {
+      "id": "pmwkxe8x4",
+      "name": "เกม RPG",
+      "created": "2026-11-17T16:47:41Z"
     }
   ],
   "tasks": [
@@ -144,6 +149,17 @@
       ],
       "created": "2026-11-16T05:03:00Z",
       "updated": "2026-11-16T05:39:59Z"
+    },
+    {
+      "id": "tmwkxe8x4",
+      "project": "pmwkxe8x4",
+      "title": "สร้างเกม สนุกๆ open word ภายสวย pixel style",
+      "detail": "",
+      "status": "todo",
+      "plan": [],
+      "log": [],
+      "created": "2026-11-17T16:47:41Z",
+      "updated": "2026-11-17T16:47:41Z"
     }
   ]
 }
