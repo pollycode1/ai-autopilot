@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Pixel Quest - โลกเปิด</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="game-wrap">
+    <canvas id="game"></canvas>
+
+    <div id="hud">
+      <div id="hearts"></div>
+      <div id="stats">
+        <span id="coinCount">🟡 0</span>
+        <span id="gemCount">💎 0</span>
+      </div>
+    </div>
+
+    <div id="dialog" class="hidden">
+      <div id="dialogName"></div>
+      <div id="dialogText"></div>
+      <div id="dialogHint">แตะ/กด E เพื่อปิด</div>
+    </div>
+
+    <div id="toast" class="hidden"></div>
+
+    <div id="controls">
+      <div id="dpad">
+        <button class="dbtn" id="btnUp">▲</button>
+        <button class="dbtn" id="btnLeft">◀</button>
+        <button class="dbtn" id="btnDown">▼</button>
+        <button class="dbtn" id="btnRight">▶</button>
+      </div>
+      <button id="btnAction">พูด/เปิด</button>
+    </div>
+
+    <div id="startScreen">
+      <h1>🌲 Pixel Quest 🌲</h1>
+      <p>ออกผจญภัยในโลกเปิดสไตล์พิกเซล เก็บเหรียญ/เพชร คุยกับผู้คน หลบสไลม์ และสำรวจถ้ำลับ!</p>
+      <button id="btnStart">เริ่มเกม</button>
+      <p class="hint">บังคับทิศทาง: ลูกศร/WASD หรือปุ่มบนจอ · โต้ตอบ: E หรือปุ่ม "พูด/เปิด"</p>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+<script src="../../app-helper.js" data-app="pmwkxe8x4" data-owner="pollycode1" data-repo="ai-autopilot"></script>
+</body>
+</html>
