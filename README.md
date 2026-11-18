@@ -63,6 +63,14 @@ GitHub → รูปโปรไฟล์ → **Settings** → **Developer setti
 2. แท็บ ⚙️ สถานะ → กด **เริ่มทำงานตอนนี้**
 3. รอสักครู่ กดเข้าไปในงานจะเห็นแผนที่ AI วิเคราะห์ ขั้นตอนที่ติ๊กแล้ว และบันทึกการทำงาน
 
+### 8) (ทางเลือก) นำเข้าโปรเจคจาก GitHub repo อื่นของคุณ
+1. แก้ token ที่ https://github.com/settings/personal-access-tokens → Repository access เลือก **All repositories**
+   และ Permissions เพิ่ม **Contents** กับ **Pull requests** เป็น Read and write
+2. ไปที่ repo `ai-autopilot` → Settings → Secrets and variables → Actions → New repository secret
+   ชื่อ `GH_REPO_TOKEN` วาง token เดียวกัน
+3. ในแอป แท็บ 🔑 ตั้งค่า → "🐙 นำเข้าโปรเจคจาก GitHub" → โหลดรายชื่อ repo → เลือกทั้งหมด → นำเข้า
+4. เพิ่มงานในโปรเจคนั้นได้ตามปกติ AI จะทำบน branch `ai-autopilot/<id งาน>` แล้วเปิด Pull Request ให้คุณตรวจก่อน merge
+
 ## ใช้งานประจำวัน
 - **เพิ่มงาน:** พิมพ์สิ่งที่อยากได้ ยิ่งเขียนรายละเอียดชัด ผลงานยิ่งตรงใจ
 - **เลือกโมเดล AI:** ตั้ง "โมเดลหลัก" ในแท็บ ⏰ เวลา/AI แล้วเลือกโมเดลเฉพาะงานได้ตอนเพิ่มงานหรือในหน้างาน (Sonnet = สมดุล, Opus = เก่งสุดแต่ใช้โควตาเร็ว, Haiku = เร็ว/ประหยัด) ถ้าแพ็กเกจใช้โมเดลที่เลือกไม่ได้ ระบบจะสลับไปใช้ค่าเริ่มต้นให้เอง

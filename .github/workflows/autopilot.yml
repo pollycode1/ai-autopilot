@@ -32,6 +32,8 @@ jobs:
     timeout-minutes: 330
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false   # ไม่เก็บ token ไว้ใน .git/config ที่ AI อ่านได้ (ตัวรันจะ push เองด้วย token จากไฟล์)
       - name: มีคำถามค้างอยู่ไหม (เช่นค้างเพราะติด limit)
         env:
           GH_TOKEN: ${{ github.token }}
@@ -59,6 +61,15 @@ jobs:
       - name: ติดตั้ง Claude Code
         if: steps.check.outputs.go == 'yes'
         run: npm install -g @anthropic-ai/claude-code
+      - name: เตรียม token ให้ตัวรัน (ส่งเป็นไฟล์ ไม่ใส่ใน env ที่ AI มองเห็น)
+        if: steps.check.outputs.go == 'yes'
+        env:
+          T_ROOT: ${{ github.token }}
+          T_REPO: ${{ secrets.GH_REPO_TOKEN }}   # (ไม่บังคับ) ใช้กับโปรเจคที่นำเข้าจาก GitHub repo อื่น
+        run: |
+          umask 077
+          printf '%s' "$T_ROOT" > "$RUNNER_TEMP/gh_token"
+          printf '%s' "$T_REPO" > "$RUNNER_TEMP/repo_token"
       - name: ทำงานตามรายการ
         if: steps.check.outputs.go == 'yes'
         env:
@@ -67,6 +78,7 @@ jobs:
           ONLY_TASK: ${{ inputs.task }}
           ONLY_PROJECT: ${{ inputs.project }}
         run: |
+          export GH_TOKEN_FILE="$RUNNER_TEMP/gh_token" GH_REPO_TOKEN_FILE="$RUNNER_TEMP/repo_token"
           git config user.name "ai-autopilot"
           git config user.email "ai-autopilot@users.noreply.github.com"
           echo "BEFORE=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
