@@ -13,7 +13,19 @@ rm -rf www/workspace www/node_modules
 VC=$(( $(date +%s) / 60 ))
 REPO_FULL="${GITHUB_REPOSITORY:-$(git -C "$ROOT" config --get remote.origin.url | sed -E 's#.*github.com[:/]##; s#\.git$##')}"
 OWNER="${REPO_FULL%%/*}"; REPO="${REPO_FULL##*/}"
-if [ "$ID" != "autopilot" ]; then
+if [ "$ID" = "autopilot" ]; then
+  # แอปหลัก: ถ้าออนไลน์ให้เปิดเวอร์ชันล่าสุดจากเว็บเสมอ (อัปเดตแอปได้โดยไม่ต้องติดตั้ง APK ใหม่)
+  python3 - "https://$OWNER.github.io/$REPO/" <<'PY2'
+import sys, pathlib
+live = sys.argv[1]
+p = pathlib.Path("www/index.html"); h = p.read_text(encoding="utf-8")
+js = ("<script>(function(){if(location.hostname!=='localhost'||!navigator.onLine)return;"
+      "var c=new AbortController();setTimeout(function(){c.abort()},3500);"
+      f"fetch('{live}index.html',{{cache:'no-store',signal:c.signal}}).then(function(r){{if(r.ok)location.replace('{live}')}}).catch(function(){{}})}})()</script>")
+h = h.replace("<head>", "<head>" + js, 1)
+p.write_text(h, encoding="utf-8")
+PY2
+else
   # ใส่ตัวช่วยอัปเดต (เปิดเวอร์ชันล่าสุดจากเว็บ, แจ้ง APK ใหม่, ปุ่ม 🔧 สั่ง AI)
   cp "$ROOT/docs/app-helper.js" www/app-helper.js
   python3 - "$ID" "$OWNER" "$REPO" "$VC" <<'PY2'
@@ -42,10 +54,30 @@ if [ -n "$ICON" ]; then
   done
   rm -f android/app/src/main/res/mipmap-anydpi-v26/ic_launcher*.xml
 fi
-# ใช้ key เดิมทุกครั้ง เพื่อให้ติดตั้งทับ (อัปเดต) ได้
-mkdir -p ~/.android && cp "$ROOT/android/debug.keystore" ~/.android/debug.keystore
+# ใช้ key เดิมทุกครั้ง เพื่อให้ติดตั้งทับ (อัปเดต) ได้ — กำหนดใน build.gradle ตรงๆ
+# (เดิมพึ่ง ~/.android/debug.keystore แต่เครื่อง build ของ GitHub ใช้ที่อื่น ทำให้ได้ key สุ่มทุกครั้ง)
+python3 - "$ROOT/android/debug.keystore" <<'PY2'
+import sys, pathlib
+g = pathlib.Path("android/app/build.gradle"); s = g.read_text()
+cfg = f"""android {{
+    signingConfigs {{
+        debug {{
+            storeFile file("{sys.argv[1]}")
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }}
+    }}"""
+assert s.count("android {") >= 1
+g.write_text(s.replace("android {", cfg, 1))
+PY2
 # เลขเวอร์ชันเพิ่มขึ้นทุกครั้งที่ build
 sed -i "s/versionCode 1$/versionCode $VC/" android/app/build.gradle
 (cd android && ./gradlew -q assembleDebug)
-mkdir -p "$(dirname "$OUT")" && cp android/app/build/outputs/apk/debug/app-debug.apk "$OUT"
+APK=android/app/build/outputs/apk/debug/app-debug.apk
+# ตรวจว่า APK เซ็นด้วย key เดิมจริง ไม่งั้นผู้ใช้จะติดตั้งทับไม่ได้
+WANT=$(keytool -list -v -keystore "$ROOT/android/debug.keystore" -storepass android | grep -m1 'SHA256:' | awk '{print $2}')
+GOT=$(keytool -printcert -jarfile "$APK" | grep -m1 'SHA256:' | awk '{print $2}')
+[ -n "$WANT" ] && [ "$WANT" = "$GOT" ] || { echo "❌ APK เซ็นด้วย key ผิด ($GOT ไม่ใช่ $WANT)"; exit 1; }
+mkdir -p "$(dirname "$OUT")" && cp "$APK" "$OUT"
 echo "✅ $OUT"
