@@ -419,7 +419,7 @@ async function ghApi(path) {
 }
 async function listRepos() {
   const all = [];
-  for (let page = 1; page <= 10; page++) {
+  for (let page = 1; page <= 50; page++) {
     const r = await ghApi(`/user/repos?per_page=100&page=${page}&sort=updated&affiliation=owner,collaborator,organization_member`);
     all.push(...r); if (r.length < 100) break;
   }
