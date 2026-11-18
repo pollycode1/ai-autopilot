@@ -3,7 +3,7 @@
 import json, os, re, subprocess, sys, time, datetime, pathlib
 from zoneinfo import ZoneInfo
 sys.path.insert(0, os.path.dirname(__file__))
-from tasklib import ROOT, load, save, find, now, merge, merge_chat, project_of, project_name, valid_model
+from tasklib import ROOT, load, save, find, now, merge, merge_chat, project_of, project_name, valid_model, project_info, REPO_RE
 
 LIMIT_RE = re.compile(r"usage limit|session limit|weekly limit|rate[ _-]?limit|limit reached|hit your .{0,20}limit|\b429\b|overloaded|quota|credit balance|\bresets?\b|try again later", re.I)
 MAX_WAIT_MIN = int(os.environ.get("MAX_LIMIT_WAIT_MINUTES", "120"))  # รอ limit รีเซ็ตในรอบเดียวกันได้นานสุดกี่นาที
@@ -36,10 +36,82 @@ FORCE = os.environ.get("FORCE_RUN", "").lower() in ("1", "true", "yes") or bool(
 RUN_ID = os.environ.get("GITHUB_RUN_ID") or f"local-{os.getpid()}"
 LOCK_MIN = 70  # งานที่ถูกล็อกโดยรอบอื่นเกินกี่นาทีถือว่าหลุดแล้ว
 CLAUDE = os.environ.get("CLAUDE_BIN", "claude")
+# token สำหรับ repo อื่นที่นำเข้ามา: เอาออกจาก env เพื่อไม่ให้ส่งต่อไปถึง AI
+REPO_TOKEN = os.environ.pop("GH_REPO_TOKEN", "").strip()
+GH_API = os.environ.get("GITHUB_API_URL", "https://api.github.com")
+GH_HOST = os.environ.get("GIT_HOST_URL", "https://github.com")
 os.chdir(ROOT)
 
 def sh(*cmd, check=True):
     return subprocess.run(cmd, check=check, text=True, capture_output=True)
+
+# ---------- โปรเจคที่เป็น GitHub repo ----------
+def repo_dir(pid):
+    return ROOT / "repos" / pid
+
+def rgit(pid, *args, check=True, cwd=True):
+    """รัน git กับ repo ของโปรเจค โดยส่ง token ทาง env (ไม่โผล่ใน URL หรือ log)"""
+    import base64
+    env = dict(os.environ)
+    if REPO_TOKEN:
+        auth = base64.b64encode(f"x-access-token:{REPO_TOKEN}".encode()).decode()
+        env.update(GIT_CONFIG_COUNT="1", GIT_CONFIG_KEY_0=f"http.{GH_HOST}/.extraheader",
+                   GIT_CONFIG_VALUE_0=f"AUTHORIZATION: basic {auth}", GIT_TERMINAL_PROMPT="0")
+    p = subprocess.run(["git", *args], cwd=repo_dir(pid) if cwd else ROOT, env=env, text=True, capture_output=True)
+    if check and p.returncode != 0:
+        raise RuntimeError(f"git {args[0]}: " + (p.stderr or p.stdout).replace(REPO_TOKEN or "\0", "***").strip()[-300:])
+    return p
+
+def branch_of(tid):
+    return f"ai-autopilot/{tid}"
+
+def prepare_repo(proj, tid):
+    """clone repo ของโปรเจค แล้วสลับไป branch ของงานนี้ (ทำต่อจากรอบก่อนถ้ามี)"""
+    pid, full = proj["id"], proj["repo"]
+    d = repo_dir(pid)
+    if not (d / ".git").is_dir():
+        d.parent.mkdir(exist_ok=True)
+        rgit(pid, "clone", "-q", f"{GH_HOST}/{full}.git", str(d), cwd=False)
+        rgit(pid, "config", "user.name", "ai-autopilot")
+        rgit(pid, "config", "user.email", "ai-autopilot@users.noreply.github.com")
+    if rgit(pid, "rev-parse", "--verify", "-q", "HEAD", check=False).returncode != 0:
+        return proj.get("branch") or "main"            # repo ว่าง: ทำบน branch หลักเลย
+    br = branch_of(tid)
+    rgit(pid, "fetch", "-q", "origin")
+    if rgit(pid, "ls-remote", "--exit-code", "--heads", "origin", br, check=False).returncode == 0:
+        rgit(pid, "checkout", "-q", "-B", br, f"origin/{br}")
+    else:
+        base = proj.get("branch") or rgit(pid, "symbolic-ref", "--short", "refs/remotes/origin/HEAD", check=False).stdout.strip().replace("origin/", "") or "main"
+        rgit(pid, "checkout", "-q", "-B", br, f"origin/{base}")
+    return br
+
+def gh_api(path, method="GET", body=None):
+    import urllib.request
+    req = urllib.request.Request(GH_API + path, method=method, data=json.dumps(body).encode() if body is not None else None,
+                                 headers={"Authorization": f"Bearer {REPO_TOKEN}", "Accept": "application/vnd.github+json"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return json.loads(r.read() or b"null")
+
+def push_repo(proj, task, br):
+    """commit งานใน repo ของโปรเจค, push ไป branch ของงาน แล้วเปิด PR (ครั้งแรก)"""
+    pid, tid = proj["id"], task["id"]
+    rgit(pid, "add", "-A")
+    if rgit(pid, "diff", "--cached", "--quiet", check=False).returncode != 0:
+        rgit(pid, "commit", "-q", "-m", f"ai-autopilot: {task.get('title', tid)[:60]}")
+    if rgit(pid, "rev-parse", "--verify", "-q", "HEAD", check=False).returncode != 0:
+        return None
+    rgit(pid, "push", "-q", "origin", f"HEAD:refs/heads/{br}")
+    base = proj.get("branch") or "main"
+    if br == base or task.get("pr"):
+        return None
+    if rgit(pid, "rev-list", "--count", f"origin/{base}..HEAD", check=False).stdout.strip() in ("", "0"):
+        return None                                     # ยังไม่มีอะไรเปลี่ยน ไม่ต้องเปิด PR
+    owner = proj["repo"].split("/")[0]
+    found = gh_api(f"/repos/{proj['repo']}/pulls?state=all&head={owner}:{br}")
+    if found:
+        return found[0]["html_url"]
+    body = (task.get("detail") or "") + f"\n\n---\nสร้างโดย AI Autopilot จากงาน `{tid}`"
+    return gh_api(f"/repos/{proj['repo']}/pulls", "POST", {"title": task.get("title", tid)[:120], "head": br, "base": base, "body": body.strip()})["html_url"]
 
 def window_minutes_left(cfg, at=None):
     """คืนจำนวนนาทีที่เหลือในช่วงเวลาทำงานปัจจุบัน หรือ 0 ถ้าอยู่นอกช่วง (days: 0=อาทิตย์ ... 6=เสาร์)"""
@@ -196,9 +268,31 @@ def work():
         task = find(load(), tid)  # โหลดใหม่หลังซิงก์ เผื่อผู้ใช้เพิ่งเปลี่ยนโมเดล/รายละเอียด
         minutes = int(min(SESSION_MIN, left - 2))
         print(f"▶ ทำงาน {tid}: {task.get('title')} ({minutes} นาที)", flush=True)
-        prompt = (ROOT / "prompts/agent.md").read_text(encoding="utf-8") \
+        pid = project_of(task)
+        proj = project_info(load(), pid)
+        repo_br = None
+        if proj.get("repo"):
+            err = None
+            if not REPO_RE.match(proj["repo"]):
+                err = f"ชื่อ repo '{proj['repo'][:60]}' ไม่ถูกต้อง"
+            elif not REPO_TOKEN:
+                err = ("ยังไม่ได้ใส่ GH_REPO_TOKEN — ไปที่ GitHub repo ai-autopilot → Settings → Secrets and variables → Actions "
+                       "→ New repository secret ชื่อ GH_REPO_TOKEN ใส่ token ที่เข้าถึง repo นี้ได้ (Contents + Pull requests: Read and write)")
+            else:
+                try:
+                    repo_br = prepare_repo(proj, tid)
+                except Exception as e:
+                    err = f"เปิด repo {proj['repo']} ไม่ได้: {e}"
+            if err:
+                data = load(); t = find(data, tid); t["status"] = "blocked"; t["updated"] = now()
+                t.setdefault("log", []).append({"time": now(), "by": "system", "text": "⚠️ " + err})
+                save(data); sync("autopilot: repo ไม่พร้อม"); continue
+        workdir = f"repos/{pid}/" if repo_br else f"workspace/{pid}/"
+        note = (ROOT / ("prompts/repo.md" if repo_br else "prompts/app.md")).read_text(encoding="utf-8").strip()
+        prompt = (ROOT / "prompts/agent.md").read_text(encoding="utf-8").replace("{PROJECT_NOTE}", note) \
+            .replace("{WORKDIR}", workdir).replace("{REPO}", proj.get("repo", "")).replace("{BRANCH}", repo_br or "") \
             .replace("{TASK_ID}", tid).replace("{MINUTES}", str(minutes)) \
-            .replace("{PROJECT}", project_of(task)).replace("{PROJECT_NAME}", project_name(load(), project_of(task)))
+            .replace("{PROJECT}", pid).replace("{PROJECT_NAME}", project_name(load(), pid))
         model = (task.get("model") or cfg.get("default_model") or "").strip()
         if not valid_model(model):
             add_log(tid, f"⚠️ ชื่อโมเดล '{model[:40]}' ไม่ถูกต้อง — ใช้โมเดลค่าเริ่มต้นแทน"); model = ""
@@ -213,6 +307,15 @@ def work():
             else:
                 out, code = "timeout", 124
         print(out[-3000:], flush=True)
+        if repo_br:
+            try:
+                url = push_repo(proj, find(load(), tid), repo_br)
+                if url:
+                    data = load(); t = find(data, tid); t["pr"] = url; t["updated"] = now()
+                    t.setdefault("log", []).append({"time": now(), "by": "system", "text": f"🔀 เปิด Pull Request ใน {proj['repo']} แล้ว: {url}"})
+                    save(data)
+            except Exception as e:
+                add_log(tid, f"⚠️ บันทึกงานลง {proj['repo']} ไม่สำเร็จ: {str(e).replace(REPO_TOKEN or chr(0), '***')[:300]}")
         if code != 0 and LIMIT_RE.search(out):
             line = next((l for l in out.splitlines() if LIMIT_RE.search(l)), "")[:200]
             rt = reset_time(out)

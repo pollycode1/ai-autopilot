@@ -134,7 +134,8 @@ function projList() {
   const names = Object.fromEntries((state.projects || []).map(p => [p.id, p.name]));
   const ids = [...new Set([...(state.projects || []).map(p => p.id), ...(state.tasks || []).map(projOf)])]
     .filter(id => (state.tasks || []).some(t => projOf(t) === id) || (state.projects || []).some(p => p.id === id));
-  return ids.map(id => ({ id, name: names[id] || (state.tasks.find(t => t.id === id) || {}).title || id }));
+  const repos = Object.fromEntries((state.projects || []).filter(p => p.repo).map(p => [p.id, p]));
+  return ids.map(id => ({ id, name: names[id] || (state.tasks.find(t => t.id === id) || {}).title || id, repo: repos[id]?.repo, branch: repos[id]?.branch }));
 }
 function loadApks(cb) {
   if (state.apks) return;
@@ -164,7 +165,7 @@ function vTasks() {
   v.innerHTML = `
     <div class="card">
       <label for="ps" style="margin-top:0">โปรเจค</label>
-      <select id="ps">${projects.map(p => `<option value="${esc(p.id)}" ${p.id === sel ? "selected" : ""}>📁 ${esc(p.name)}</option>`).join("")}
+      <select id="ps">${projects.map(p => `<option value="${esc(p.id)}" ${p.id === sel ? "selected" : ""}>${p.repo ? "🐙" : "📁"} ${esc(p.name)}</option>`).join("")}
         <option value="__new" ${sel === "__new" ? "selected" : ""}>＋ สร้างโปรเจคใหม่</option></select>
       <div id="npw" class="${sel === "__new" ? "" : "hidden"}"><label for="np">ชื่อโปรเจคใหม่</label><input id="np" placeholder="เช่น แอปจดรายรับรายจ่าย"></div>
       <label for="nt">อยากให้ AI ทำอะไร</label>
@@ -177,14 +178,16 @@ function vTasks() {
         <span class="grow"></span><button class="primary" id="add">+ เพิ่มงาน</button></div>
     </div>
     ${groups.length ? "" : `<p class="mute">ยังไม่มีงาน เพิ่มงานแรกด้านบนได้เลย</p>`}
+    <p class="mute" style="text-align:center"><a href="#" id="goimp">🐙 นำเข้าโปรเจคจาก GitHub repo ของคุณ</a></p>
     ${groups.map(g => { const left = g.tasks.filter(t => t.status !== "done").length; return `
       <div class="card" style="border-width:2px">
-        <div class="row"><h3 class="grow" style="margin:0">📁 ${esc(g.name)}</h3><span class="mute">${left ? `ค้าง ${left} งาน` : "เสร็จหมดแล้ว"}</span></div>
+        <div class="row"><h3 class="grow" style="margin:0">${g.repo ? "🐙" : "📁"} ${esc(g.name)}</h3><span class="mute">${left ? `ค้าง ${left} งาน` : g.tasks.length ? "เสร็จหมดแล้ว" : "ยังไม่มีงาน"}</span></div>
         <div class="row" style="margin:8px 0">
           ${left ? `<button class="primary" data-runp="${esc(g.id)}">▶ ทำโปรเจคนี้เลย</button>` : ""}
           <button data-addp="${esc(g.id)}">＋ งาน</button>
-          <a class="btn" href="https://${esc(S.owner)}.github.io/${esc(S.repo)}/workspace/${esc(g.id)}/" target="_blank" rel="noopener">🌐 เปิด</a>
-          ${state.apks && state.apks[g.id] ? `<a class="btn" href="${esc(state.apks[g.id])}">📱 APK</a>` : ""}
+          ${g.repo ? `<a class="btn" href="https://github.com/${esc(g.repo)}" target="_blank" rel="noopener">🐙 repo</a>`
+            : `<a class="btn" href="https://${esc(S.owner)}.github.io/${esc(S.repo)}/workspace/${esc(g.id)}/" target="_blank" rel="noopener">🌐 เปิด</a>`}
+          ${!g.repo && state.apks && state.apks[g.id] ? `<a class="btn" href="${esc(state.apks[g.id])}">📱 APK</a>` : ""}
         </div>
         ${g.tasks.map(t => { const n=(t.plan||[]).length, d=(t.plan||[]).filter(s=>s.done).length; return `
           <div class="task" data-id="${esc(t.id)}" style="border-top:1px solid var(--line);padding:10px 0 4px">
@@ -195,6 +198,7 @@ function vTasks() {
       </div>`; }).join("")}`;
   $("#nt").value = draft.nt; $("#nd").value = draft.nd; $("#np").value = draft.np;
   $("#ps").onchange = e => { state.newProj = e.target.value; vTasks(); };
+  $("#goimp").onclick = e => { e.preventDefault(); state.tab = "settings"; render(); setTimeout(() => $("#imp")?.scrollIntoView({ behavior: "smooth" }), 50); };
   document.querySelectorAll("[data-runp]").forEach(b => b.onclick = () => runProject(b.dataset.runp, b));
   document.querySelectorAll("[data-addp]").forEach(b => b.onclick = () => { state.newProj = b.dataset.addp; vTasks(); window.scrollTo(0, 0); $("#nt").focus(); });
   $("#add").onclick = async () => {
@@ -222,18 +226,24 @@ function vTasks() {
 function vTask(t) {
   const v = $("#view");
   if (!t) { state.open = null; return vTasks(); }
+  const P = projList().find(p => p.id === projOf(t)) || {};
   v.innerHTML = `
     <button id="back">← กลับ</button>
     <div class="card" style="margin-top:12px">
       <div class="row"><h2 class="grow" style="margin:0;font-size:20px">${esc(t.title)}</h2><span class="badge s-${esc(t.status)}">${LABEL[t.status]||esc(t.status)}</span></div>
-      <div class="mute">📁 ${esc((projList().find(p => p.id === projOf(t)) || {}).name || projOf(t))}</div>
+      <div class="mute">${P.repo ? "🐙" : "📁"} ${esc(P.name || projOf(t))}${P.repo ? ` · <a href="https://github.com/${esc(P.repo)}" target="_blank" rel="noopener">${esc(P.repo)}</a>` : ""}</div>
       ${t.detail ? `<p style="white-space:pre-wrap">${esc(t.detail)}</p>` : ""}
       <label for="tm">🧠 โมเดล AI ของงานนี้</label>
       <select id="tm">${modelOpts(t.model || "", "ใช้โมเดลหลัก" + (state.config?.default_model ? ` (${modelName(state.config.default_model)})` : " (ค่าเริ่มต้น)"))}</select>
+      ${P.repo ? `<div class="row">
+      ${t.pr ? `<a class="btn primary" href="${esc(t.pr)}" target="_blank" rel="noopener">🔀 ดู Pull Request</a>` : ""}
+      <a class="btn" href="https://github.com/${esc(P.repo)}/tree/ai-autopilot/${esc(t.id)}" target="_blank" rel="noopener">📁 ไฟล์ของงานนี้</a>
+      <button id="askt">💬 ถามเกี่ยวกับโปรเจคนี้</button></div>
+      <p class="mute">AI จะทำงานบน branch แยก แล้วเปิด Pull Request ให้คุณตรวจก่อน merge เข้า repo</p>` : `
       <div class="row"><a class="btn" href="https://${esc(S.owner)}.github.io/${esc(S.repo)}/workspace/${esc(projOf(t))}/" target="_blank" rel="noopener">🌐 เปิดดูผลงาน</a>
       <button id="askt">💬 ถามเกี่ยวกับโปรเจคนี้</button>
       ${(state.apks||{})[projOf(t)] ? `<a class="btn" href="${esc(state.apks[projOf(t)])}">📱 ดาวน์โหลด APK</a>` : ""}
-      <a class="btn" href="https://github.com/${esc(S.owner)}/${esc(S.repo)}/tree/${esc(S.branch||"main")}/workspace/${esc(projOf(t))}" target="_blank" rel="noopener">📁 ไฟล์ทั้งหมด</a></div>
+      <a class="btn" href="https://github.com/${esc(S.owner)}/${esc(S.repo)}/tree/${esc(S.branch||"main")}/workspace/${esc(projOf(t))}" target="_blank" rel="noopener">📁 ไฟล์ทั้งหมด</a></div>`}
     </div>
     <div class="card"><b>แผนที่ AI วิเคราะห์</b>
       ${(t.plan||[]).length ? t.plan.map((s,i) => `<div class="step">${s.done?"✅":"⬜"} <span>${i+1}. ${esc(s.text)}</span></div>`).join("") : `<p class="mute">AI จะวิเคราะห์และแตกเป็นขั้นตอนเมื่อเริ่มทำงานนี้</p>`}
@@ -379,6 +389,17 @@ function vSettings() {
       <label>Personal access token</label><input id="tk" type="password" value="${esc(S.token||"")}" placeholder="github_pat_…">
       <div class="row" style="margin-top:12px"><button id="out" class="danger">ออกจากระบบ</button><span class="grow"></span><button class="primary" id="sv">บันทึกและเชื่อมต่อ</button></div>
     </div>
+    ${S.token ? `<div class="card" id="imp"><b>🐙 นำเข้าโปรเจคจาก GitHub</b>
+      <p class="mute">ดึงรายชื่อ repo ทั้งหมดในบัญชี GitHub ของคุณมาเป็นโปรเจคในแอป แล้วสั่งงาน AI ให้แก้โค้ดใน repo นั้นได้เลย AI จะทำบน branch แยกและเปิด Pull Request ให้คุณตรวจก่อน</p>
+      <div id="repos"></div>
+      <div class="row" style="margin-top:10px"><button id="ldr">${state.repos ? "↻ โหลดใหม่" : "🔗 เชื่อมต่อและโหลดรายชื่อ repo"}</button><span class="grow"></span>
+        ${state.repos ? `<button id="all">เลือกทั้งหมด</button><button class="primary" id="doimp">นำเข้า</button>` : ""}</div>
+      <details style="margin-top:10px"><summary class="mute">ต้องตั้งค่าอะไรบ้าง (ทำครั้งเดียว)</summary>
+        <ol class="mute" style="padding-left:20px">
+          <li>แก้ token ที่ <a href="https://github.com/settings/personal-access-tokens" target="_blank" rel="noopener">GitHub → Fine-grained tokens</a> → Repository access เลือก <b>All repositories</b> และ Permissions เพิ่ม <b>Contents</b> กับ <b>Pull requests</b> เป็น Read and write (ถ้าเห็น repo ไม่ครบ แปลว่า token ยังเข้าถึงได้ไม่ทุก repo)</li>
+          <li>ให้ AI บนคลาวด์เข้า repo อื่นได้: ไปที่ <a href="https://github.com/${esc(S.owner)}/${esc(S.repo)}/settings/secrets/actions/new" target="_blank" rel="noopener">หน้าเพิ่ม Secret</a> ตั้งชื่อ <b>GH_REPO_TOKEN</b> แล้ววาง token เดียวกัน</li>
+        </ol></details>
+    </div>` : ""}
     <p class="mute">📱 ดาวน์โหลดแอปทั้งหมดเป็นไฟล์ APK: <a href="https://github.com/${esc(S.owner||"")}/${esc(S.repo||"")}/releases/tag/apps" target="_blank" rel="noopener">หน้าดาวน์โหลด</a></p>
     <p class="mute">ติดตั้งเป็นแอป: บน Android เปิดใน Chrome → เมนู ⋮ → "เพิ่มลงในหน้าจอหลัก" / บนคอม กดไอคอนติดตั้งท้ายช่อง URL</p>`;
   $("#sv").onclick = async () => {
@@ -386,7 +407,67 @@ function vSettings() {
     try { localStorage.setItem("ap-settings", JSON.stringify(S)); } catch {}
     state.tab = "tasks"; await load();
   };
+  if ($("#imp")) vImport();
   $("#out").onclick = () => { try { localStorage.removeItem("ap-settings"); } catch {} S = {}; state.tasks = state.config = null; render(); };
+}
+
+// ---------- นำเข้า repo จาก GitHub ----------
+async function ghApi(path) {
+  const r = await fetch("https://api.github.com" + path, { cache: "no-store", headers: { Authorization: `Bearer ${S.token}`, Accept: "application/vnd.github+json" } });
+  if (!r.ok) { const e = new Error(`GitHub ${r.status}`); e.status = r.status; throw e; }
+  return r.json();
+}
+async function listRepos() {
+  const all = [];
+  for (let page = 1; page <= 10; page++) {
+    const r = await ghApi(`/user/repos?per_page=100&page=${page}&sort=updated&affiliation=owner,collaborator,organization_member`);
+    all.push(...r); if (r.length < 100) break;
+  }
+  const self = `${S.owner}/${S.repo}`.toLowerCase();
+  return all.filter(r => r.full_name.toLowerCase() !== self && !r.archived);
+}
+function repoSlug(name, taken) {
+  const base = (name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 30)) || "repo";
+  let id = base, i = 2; while (taken.has(id)) id = `${base}-${i++}`;
+  taken.add(id); return id;
+}
+function vImport() {
+  const box = $("#repos"), have = new Set((state.projects || []).filter(p => p.repo).map(p => p.repo.toLowerCase()));
+  state.repoSel ||= new Set();
+  if (state.repos) {
+    const fresh = state.repos.filter(r => !have.has(r.full_name.toLowerCase()));
+    box.innerHTML = `<p class="mute">พบ ${state.repos.length} repo · นำเข้าแล้ว ${state.repos.length - fresh.length}</p>` +
+      state.repos.map(r => { const done = have.has(r.full_name.toLowerCase()); return `
+        <label class="row" style="margin:0;padding:8px 0;border-top:1px solid var(--line);color:var(--ink);align-items:flex-start">
+          <input type="checkbox" data-r="${esc(r.full_name)}" style="width:20px;height:20px;flex:none" ${done ? "checked disabled" : state.repoSel.has(r.full_name) ? "checked" : ""}>
+          <span class="grow">${r.private ? "🔒 " : ""}<b>${esc(r.full_name)}</b>${done ? ` <span class="mute">· นำเข้าแล้ว</span>` : ""}
+            ${r.description ? `<br><span class="mute">${esc(r.description)}</span>` : ""}</span></label>`; }).join("");
+    box.querySelectorAll("[data-r]:not([disabled])").forEach(c => c.onchange = () => { c.checked ? state.repoSel.add(c.dataset.r) : state.repoSel.delete(c.dataset.r); });
+    $("#all").onclick = () => { fresh.forEach(r => state.repoSel.add(r.full_name)); vImport(); };
+    $("#doimp").onclick = async () => {
+      const pick = state.repos.filter(r => state.repoSel.has(r.full_name) && !have.has(r.full_name.toLowerCase()));
+      if (!pick.length) return toast("เลือก repo ที่ต้องการนำเข้าก่อน");
+      $("#doimp").disabled = true;
+      try {
+        const d = await mutate("tasks.json", x => {
+          x.projects ||= [];
+          const exist = new Set(x.projects.filter(p => p.repo).map(p => p.repo.toLowerCase()));
+          const taken = new Set([...x.projects.map(p => p.id), ...x.tasks.map(t => t.project || t.id)]);
+          for (const r of pick) if (!exist.has(r.full_name.toLowerCase()))
+            x.projects.push({ id: repoSlug(r.name, taken), name: r.name, repo: r.full_name, branch: r.default_branch || "main", private: !!r.private, created: nowIso() });
+        }, `app: นำเข้า ${pick.length} repo จาก GitHub`);
+        state.tasks = d.tasks.filter(x => !x.deleted); state.projects = d.projects || []; state.repoSel.clear();
+        toast(`นำเข้า ${pick.length} โปรเจคแล้ว`);
+      } catch (e) { toast(e.message); }
+      vSettings();
+    };
+  }
+  $("#ldr").onclick = async () => {
+    $("#ldr").disabled = true; box.innerHTML = `<p class="mute">กำลังโหลดรายชื่อ repo…</p>`;
+    try { state.repos = await listRepos(); }
+    catch (e) { state.repos = null; box.innerHTML = `<p class="mute">❌ ${e.status === 401 ? "token ไม่ถูกต้องหรือหมดอายุ" : "โหลดไม่ได้: " + esc(e.message)}</p>`; $("#ldr").disabled = false; return; }
+    vSettings();
+  };
 }
 
 const typing = () => /INPUT|TEXTAREA/.test(document.activeElement?.tagName) && document.activeElement.value;

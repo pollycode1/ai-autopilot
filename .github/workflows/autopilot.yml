@@ -63,6 +63,7 @@ jobs:
         if: steps.check.outputs.go == 'yes'
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GH_REPO_TOKEN: ${{ secrets.GH_REPO_TOKEN }}   # (ไม่บังคับ) ใช้กับโปรเจคที่นำเข้าจาก GitHub repo อื่น
           FORCE_RUN: ${{ inputs.force }}
           ONLY_TASK: ${{ inputs.task }}
           ONLY_PROJECT: ${{ inputs.project }}

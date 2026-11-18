@@ -34,6 +34,12 @@ def project_name(data, pid):
     t = next((x for x in data["tasks"] if x.get("id") == pid), None)
     return (t or {}).get("title", pid)
 
+def project_info(data, pid):
+    """ข้อมูลโปรเจค (dict) — โปรเจคที่นำเข้าจาก GitHub จะมี "repo": "owner/name" """
+    return next((p for p in data.get("projects", []) if p.get("id") == pid), {}) or {}
+
+REPO_RE = __import__("re").compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+
 def save(data, path=TASKS):
     pathlib.Path(path).write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
