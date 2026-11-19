@@ -167,6 +167,20 @@ def window_minutes_left(cfg, at=None):
 MODEL_ERR_RE = re.compile(r"model.{0,40}(not found|not available|invalid|unsupported|does not exist|not supported|access)|"
                           r"(invalid|unknown|unsupported).{0,20}model|not_found_error", re.I)
 
+IMG_RE = re.compile(r"^attachments/[A-Za-z0-9_-]+/[A-Za-z0-9_.-]+\.(jpe?g|png|webp|gif)$", re.I)
+
+def task_images(task):
+    """รูปที่ผู้ใช้แนบ (ตอนสร้างงาน และในข้อความถึง AI) ที่มีไฟล์อยู่จริงใน attachments/ — คืน [(path, ที่มา)]"""
+    out = [(x, "แนบตอนสร้างงาน") for x in task.get("images") or []]
+    for l in task.get("log") or []:
+        if l.get("by") == "user":
+            out += [(x, f"แนบกับข้อความ: {(l.get('text') or '')[:60]}") for x in l.get("images") or []]
+    seen, res = set(), []
+    for x, why in out:
+        if isinstance(x, str) and IMG_RE.match(x) and x not in seen and (ROOT / x).is_file():
+            seen.add(x); res.append((x, why))
+    return res
+
 def call_claude(prompt, minutes, model=""):
     """เรียก Claude Code หนึ่งครั้ง (model ว่าง = ใช้ค่าเริ่มต้นของ Claude Code)"""
     cmd = [CLAUDE, "-p", prompt, "--dangerously-skip-permissions", "--max-turns", os.environ.get("MAX_TURNS", "150")]
@@ -329,6 +343,10 @@ def work():
         if task.get("kind") == "bug":
             sevname = {"high": "ด่วน", "low": "เล็กน้อย"}.get(task.get("severity"), "ปกติ")
             prompt += "\n" + (ROOT / "prompts/bug.md").read_text(encoding="utf-8").replace("{SEVERITY}", sevname)
+        pics = task_images(task)
+        if pics:
+            prompt += "\n\nรูปประกอบที่ผู้ใช้แนบมา (เปิดดูด้วยเครื่องมือ Read ก่อนเริ่มทำ แล้วใช้ประกอบการทำงาน):\n" + \
+                "\n".join(f"- {ROOT / x} ({why})" for x, why in pics)
         model = (task.get("model") or cfg.get("default_model") or "").strip()
         if not valid_model(model):
             add_log(tid, f"⚠️ ชื่อโมเดล '{model[:40]}' ไม่ถูกต้อง — ใช้โมเดลค่าเริ่มต้นแทน"); model = ""
