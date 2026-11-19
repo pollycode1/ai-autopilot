@@ -21,7 +21,7 @@ live = sys.argv[1]
 p = pathlib.Path("www/index.html"); h = p.read_text(encoding="utf-8")
 js = ("<script>(function(){if(location.hostname!=='localhost'||!navigator.onLine)return;"
       "var c=new AbortController();setTimeout(function(){c.abort()},3500);"
-      f"fetch('{live}index.html',{{cache:'no-store',signal:c.signal}}).then(function(r){{if(r.ok)location.replace('{live}')}}).catch(function(){{}})}})()</script>")
+      f"fetch('{live}index.html',{{cache:'no-store',signal:c.signal}}).then(function(r){{if(r.ok)location.replace('{live}'+location.hash)}}).catch(function(){{}})}})()</script>")
 h = h.replace("<head>", "<head>" + js, 1)
 p.write_text(h, encoding="utf-8")
 PY2
@@ -46,6 +46,25 @@ c.setdefault("server", {})["allowNavigation"] = [f"{sys.argv[1]}.github.io"]
 json.dump(c, open("capacitor.config.json", "w"), indent=2)
 PY2
 npx cap add android >/dev/null
+if [ "$ID" = "autopilot" ]; then
+  # widget หน้าจอโฮม 🐞: จำนวนบั๊กค้าง + ปุ่มจดบั๊ก (ไฟล์อยู่ใน android/widget)
+  JDIR="android/app/src/main/java/$(echo "$PKG" | tr . /)"
+  for f in BugWidget.java MainActivity.java; do
+    sed -e "s/__PKG__/$PKG/" -e "s/__OWNER__/$OWNER/" -e "s/__REPO__/$REPO/" "$ROOT/android/widget/$f" > "$JDIR/$f"
+  done
+  cp -r "$ROOT/android/widget/res/." android/app/src/main/res/
+  python3 - <<'PY2'
+import pathlib
+m = pathlib.Path("android/app/src/main/AndroidManifest.xml"); s = m.read_text()
+r = """        <receiver android:name=".BugWidget" android:exported="false" android:label="@string/bug_widget_label">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/bug_widget_info" />
+        </receiver>
+    </application>"""
+assert s.count("</application>") == 1
+m.write_text(s.replace("</application>", r))
+PY2
+fi
 # ไอคอน: ถ้าเว็บแอปมี icon-512.png / icon.png ให้ใช้เป็นไอคอนแอป
 ICON=""; for f in icon-512.png icon.png; do [ -f "www/$f" ] && ICON="www/$f" && break; done
 if [ -n "$ICON" ]; then
