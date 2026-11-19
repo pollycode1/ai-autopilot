@@ -36,6 +36,17 @@
       ]
     },
     {
+      "name": "เพิ่มฟีเจอร์",
+      "short_name": "+ ฟีเจอร์",
+      "url": "./#newtask",
+      "icons": [
+        {
+          "src": "icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
       "name": "บั๊กค้าง",
       "short_name": "บั๊กค้าง",
       "url": "./#bugs",

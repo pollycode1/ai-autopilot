@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="bug_widget_label">🐞 จดบั๊ก</string>
-    <string name="bug_widget_desc">ดูจำนวนบั๊กค้าง และกดจดบั๊กใหม่ได้จากหน้าจอโฮม</string>
+    <string name="bug_widget_label">Autopilot จดบั๊ก</string>
+    <string name="bug_widget_desc">ดูบั๊กและฟีเจอร์ที่ค้าง และจดใหม่ได้จากหน้าจอโฮม</string>
 </resources>
