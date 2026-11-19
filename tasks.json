@@ -337,15 +337,61 @@
       "detail": "",
       "model": "",
       "model_at": "2026-11-19T04:54:33Z",
-      "status": "todo",
-      "plan": [],
-      "log": [],
+      "status": "done",
+      "plan": [
+        {
+          "text": "สำรวจโค้ดเดิม (homework_check, attendance, app_state persistence) เพื่อออกแบบโมเดลตารางเช็คข้อมูลแบบมีหัวข้อย่อย",
+          "done": false
+        },
+        {
+          "text": "สร้างโมเดล CheckColumn/CheckRowEntry/CheckTableSession ใน lib/models/check_table.dart",
+          "done": true
+        },
+        {
+          "text": "เพิ่ม state+เมธอดจัดการ (เริ่ม/ติ๊ก/ลา/จบ/ประวัติ) และ persistence ใน lib/app_state.dart",
+          "done": true
+        },
+        {
+          "text": "สร้างหน้า lib/pages/check_table_page.dart: ฟอร์มตั้งค่าตาราง+ตัวอย่างสูตรคูณ, มุมมองตารางหัวข้อหลัก-ย่อย, ประวัติ",
+          "done": true
+        },
+        {
+          "text": "เพิ่มทางเข้าหน้านี้ในเมนูของ main.dart",
+          "done": true
+        },
+        {
+          "text": "เขียน unit test ครอบคลุม model+AppState logic ใหม่",
+          "done": true
+        },
+        {
+          "text": "รัน flutter analyze และ flutter test ทั้งหมด แก้บัคที่เจอจนผ่าน",
+          "done": true
+        }
+      ],
+      "log": [
+        {
+          "time": "2026-11-19T05:02:09Z",
+          "by": "ai",
+          "text": "แนวทาง: เพิ่มฟีเจอร์ใหม่ 'ตารางเช็คข้อมูล' (ไม่ผูกกับ hw check เดิมที่ใช้คลิกเกอร์ลงทะเบียน) เป็นหน้าแยกเข้าจากเมนู overflow — ตั้งชื่อตาราง+เลือกห้อง+กำหนดหัวข้อหลัก โดยหัวข้อหลักแต่ละอันมีหัวข้อย่อยได้ (เช่น 'แม่ 2' ย่อยเป็น 2x1..2x12) แสดงเป็นตาราง 2 แถวหัว (กลุ่ม/ย่อย) x แถวนักเรียน แตะติ๊กผ่าน/ไม่ผ่านต่อเซลล์ มีปุ่มเติมตัวอย่างสูตรคูณอัตโนมัติ และมีประวัติแก้ไข/ลบย้อนหลังแบบเดียวกับเช็คงาน"
+        },
+        {
+          "time": "2026-11-19T05:07:43Z",
+          "by": "ai",
+          "text": "เสร็จแล้ว: เพิ่มฟีเจอร์ 'ตารางเช็คข้อมูล' เป็นหน้าใหม่แยกจากเช็คงานเดิม เข้าได้จากเมนู ⋮ มุมบนขวา > 'ตารางเช็คข้อมูล'\n- โมเดล: repos/classclick/lib/models/check_table.dart (CheckColumn รองรับหัวข้อย่อยในหัวข้อหลัก เช่น 'แม่ 2' ย่อยเป็น '2×1'..'2×12', CheckRowEntry ต่อนักเรียน, CheckTableSession)\n- state+persistence: repos/classclick/lib/app_state.dart เพิ่ม checkTableSession/checkTableHistory + เมธอด ctStart/ctToggleLeaf/ctMarkAbsent/ctEnd/ctDeleteHistory/ctReopenHistory, บันทึกลง SharedPreferences และรวมอยู่ใน exportBackup/importBackup\n- หน้า UI: repos/classclick/lib/pages/check_table_page.dart — ตั้งค่า (ชื่อตาราง/ห้อง/พิมพ์หัวข้อ+ย่อยแบบ 'ชื่อ: ย่อย1,ย่อย2' หรือมีปุ่มเติมตัวอย่างสูตรคูณ 2-12 ให้อัตโนมัติ) แล้วแสดงเป็นตาราง 2 แถวหัว (หัวข้อหลักคร่อมหัวข้อย่อย + หัวข้อย่อย) x แถวนักเรียน เลื่อนแนวนอน/ตั้งได้ แตะเซลล์ติ๊กผ่าน/ไม่ผ่าน กดชื่อค้างไว้เพื่อมาร์ค 'ลา' มีสรุปจำนวนผ่านครบ และประวัติแก้ไข/ลบย้อนหลัง\n- ผูกเข้า main.dart ผ่าน PopupMenuItem 'checkTable' ในเมนู overflow (รูปแบบเดียวกับ 'ตารางมาเรียน')\nทดสอบ: ติดตั้ง Flutter stable SDK ชั่วคราว (ไม่มีในเครื่องเดิม) รัน 'flutter analyze' ไม่มี error/warning ใหม่จากไฟล์ที่เพิ่ม, เขียนเทสต์ใหม่ test/check_table_test.dart (13 เทสต์ ครอบคลุม model+JSON round-trip+AppState ctStart/ctToggleLeaf/ctMarkAbsent/ctEnd/ctReopenHistory/ctDeleteHistory/backup round-trip) รัน 'flutter test' ทั้งโปรเจกต์ผ่านหมด 72 เทสต์เดิม + 13 เทสต์ใหม่ (รวม skip 1 เทสต์เดิมเหมือนก่อนแก้)\nหมายเหตุ: pubspec.lock/ไฟล์ generated plugin ที่เปลี่ยนจาก flutter pub get ของ SDK ที่ติดตั้งชั่วคราว ถูก revert กลับแล้ว ไม่รวมอยู่ใน diff"
+        },
+        {
+          "time": "2026-11-19T05:07:56Z",
+          "by": "system",
+          "text": "🔀 เปิด Pull Request ใน pollycode1/classclick แล้ว: https://github.com/pollycode1/classclick/pull/10"
+        }
+      ],
       "created": "2026-11-19T04:54:33Z",
-      "updated": "2026-11-19T04:54:33Z",
+      "updated": "2026-11-19T05:07:56Z",
       "lock": {
         "run": "44461217083",
         "at": "2026-11-19T04:59:12Z"
-      }
+      },
+      "pr": "https://github.com/pollycode1/classclick/pull/10"
     }
   ]
 }
