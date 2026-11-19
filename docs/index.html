@@ -142,7 +142,9 @@ function render() {
     if (t) return vTask(t);
     state.open = null;                       // บั๊กถูกลบไปแล้ว กลับไปหน้ารายการบั๊ก
   }
+  const ae = document.activeElement, fid = /INPUT|TEXTAREA/.test(ae?.tagName) && $("#view").contains(ae) ? ae.id : null;
   ({ tasks: vTasks, bugs: vBugs, chat: vChat, schedule: vSchedule, runs: vRuns, settings: vSettings })[state.tab]();
+  if (fid) { const el = document.getElementById(fid); if (el && document.activeElement !== el) el.focus({ preventScroll: true }); }   // วาดใหม่แล้วคืนช่องที่กำลังพิมพ์
 }
 
 const projOf = t => t.project || t.id;
@@ -547,7 +549,8 @@ function vImport() {
   };
 }
 
-const typing = () => /INPUT|TEXTAREA/.test(document.activeElement?.tagName) && document.activeElement.value;
+// กำลังพิมพ์/เลือกช่องในฟอร์มอยู่ (แม้ยังว่าง) ห้ามรีเฟรชเบื้องหลัง ไม่งั้นฟอร์มถูกวาดใหม่แล้วคีย์บอร์ดหลุด
+const typing = () => /INPUT|TEXTAREA/.test(document.activeElement?.tagName) && !!$("#view")?.contains(document.activeElement);
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => { state.tab = b.dataset.tab; state.open = null; state.draft = null; render(); });
 $("#refresh").onclick = () => { state.apks = null; load(); };
 document.addEventListener("visibilitychange", () => { if (!document.hidden && !typing()) load(true); });
