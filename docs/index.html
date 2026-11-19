@@ -128,7 +128,7 @@ async function load(quiet) {
 }
 
 // ---------- Views ----------
-function render() {
+function renderView() {
   if (state.pendingOpen && state.tasks) {        // เปิดงานจาก widget หลังโหลดรายการเสร็จ
     const t = state.tasks.find(t => t.id === state.pendingOpen);
     if (t) { state.pendingOpen = null; state.tab = t.kind === "bug" ? "bugs" : "tasks"; state.open = t.id; }
@@ -142,9 +142,18 @@ function render() {
     if (t) return vTask(t);
     state.open = null;                       // บั๊กถูกลบไปแล้ว กลับไปหน้ารายการบั๊ก
   }
-  const ae = document.activeElement, fid = /INPUT|TEXTAREA/.test(ae?.tagName) && $("#view").contains(ae) ? ae.id : null;
   ({ tasks: vTasks, bugs: vBugs, chat: vChat, schedule: vSchedule, runs: vRuns, settings: vSettings })[state.tab]();
-  if (fid) { const el = document.getElementById(fid); if (el && document.activeElement !== el) el.focus({ preventScroll: true }); }   // วาดใหม่แล้วคืนช่องที่กำลังพิมพ์
+}
+// วาดหน้าใหม่โดยไม่ทำช่องที่กำลังพิมพ์หาย: จำช่อง (id หรือลำดับ) + ข้อความ แล้วคืนให้หลังวาด
+function render() {
+  const view = $("#view"), ae = document.activeElement, fields = () => [...view.querySelectorAll("input,textarea")];
+  const had = /INPUT|TEXTAREA/.test(ae?.tagName) && view.contains(ae) ? { id: ae.id, i: fields().indexOf(ae), v: ae.value, type: ae.type } : null;
+  renderView();
+  if (!had) return;
+  const el = (had.id && document.getElementById(had.id)) || fields()[had.i];
+  if (!el || (had.id && el.id !== had.id)) return;
+  if (!el.value && had.v && !/checkbox|radio/.test(had.type)) el.value = had.v;
+  if (document.activeElement !== el) el.focus({ preventScroll: true });
 }
 
 const projOf = t => t.project || t.id;
