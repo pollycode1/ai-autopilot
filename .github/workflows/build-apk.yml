@@ -47,6 +47,7 @@ jobs:
           print("apps=" + json.dumps(apps, ensure_ascii=False))
           PY
       - name: เตรียมหน้าดาวน์โหลด
+        if: github.ref == 'refs/heads/main'
         env: { GH_TOKEN: "${{ github.token }}" }
         run: gh release view apps >/dev/null 2>&1 || gh release create apps --title "📱 แอป Android (APK)" --notes "ไฟล์ APK ล่าสุดของทุกแอป อัปเดตอัตโนมัติ — ดาวน์โหลดบนมือถือแล้วกดติดตั้ง"
 
@@ -70,7 +71,12 @@ jobs:
           APP_DIR: ${{ matrix.app.dir }}
           APP_NAME: ${{ matrix.app.name }}
         run: ./scripts/build_apk.sh "$APP_ID" "$APP_DIR" "$APP_NAME" "out/$APP_ID.apk"
+      - name: เก็บ APK ทดสอบ (build จาก branch อื่นที่ไม่ใช่ main ไม่ขึ้นหน้าดาวน์โหลด)
+        if: github.ref != 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with: { name: "${{ matrix.app.id }}-apk", path: "out/${{ matrix.app.id }}.apk", retention-days: 7 }
       - name: อัปโหลด APK
+        if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
           APP_ID: ${{ matrix.app.id }}

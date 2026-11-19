@@ -323,6 +323,7 @@ function vBugs() {
           <div class="mute">${t.pr ? "🔀 มี PR · " : ""}แจ้ง ${fmt(t.created)}${t.status === "done" ? " · แก้เสร็จ " + fmt(t.updated) : ""}</div>
         </div>`).join("")}</div>`).join("")}`;
   $("#bt").value = d.bt; $("#bs").value = d.bs; $("#be").value = d.be;
+  if (state.focusBug) { state.focusBug = false; $("#bt").focus(); $("#bt").scrollIntoView({ block: "center" }); }
   $("#bp").onchange = e => { state.bugProj = e.target.value; };
   v.querySelectorAll("[data-f]").forEach(c => c.onclick = () => { state.bugFilter = c.dataset.f; vBugs(); });
   v.querySelectorAll(".task").forEach(el => el.onclick = () => { state.open = el.dataset.id; render(); window.scrollTo(0, 0); });
@@ -545,7 +546,14 @@ $("#refresh").onclick = () => { state.apks = null; load(); };
 document.addEventListener("visibilitychange", () => { if (!document.hidden && !typing()) load(true); });
 setInterval(() => { if (!document.hidden && (state.tab === "tasks" || state.tab === "bugs") && !typing()) load(true); }, 60000);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
-render(); load(true);
+// เปิดจาก widget/ทางลัดบนหน้าจอโฮม: #bugs = แท็บ 🐞, #newbug = ฟอร์มจดบั๊กพร้อมพิมพ์
+function fromHash() {
+  const h = location.hash.slice(1); if (h !== "bugs" && h !== "newbug") return;
+  history.replaceState(null, "", location.pathname + location.search);
+  state.tab = "bugs"; state.open = null; state.bugFilter = "open"; state.focusBug = h === "newbug"; render();
+}
+window.addEventListener("hashchange", fromHash);
+fromHash(); render(); load(true);
 </script>
 </body>
 </html>
