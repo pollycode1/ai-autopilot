@@ -129,6 +129,10 @@ async function load(quiet) {
 
 // ---------- Views ----------
 function render() {
+  if (state.pendingOpen && state.tasks) {        // เปิดงานจาก widget หลังโหลดรายการเสร็จ
+    const t = state.tasks.find(t => t.id === state.pendingOpen); state.pendingOpen = null;
+    if (t) { state.tab = t.kind === "bug" ? "bugs" : "tasks"; state.open = t.id; }
+  }
   document.querySelectorAll("nav button").forEach(b => b.classList.toggle("on", b.dataset.tab === state.tab));
   if (!S.token && state.tab !== "settings") state.tab = "settings";
   if (state.tab === "bugs" && state.open) {
@@ -207,6 +211,7 @@ function vTasks() {
           </div>`; }).join("")}
       </div>`; }).join("")}`;
   $("#nt").value = draft.nt; $("#nd").value = draft.nd; $("#np").value = draft.np;
+  if (state.focusTask) { state.focusTask = false; $("#nt").focus(); $("#nt").scrollIntoView({ block: "center" }); }
   $("#ps").onchange = e => { state.newProj = e.target.value; vTasks(); };
   $("#goimp").onclick = e => { e.preventDefault(); state.tab = "settings"; render(); setTimeout(() => $("#imp")?.scrollIntoView({ behavior: "smooth" }), 50); };
   document.querySelectorAll("[data-runp]").forEach(b => b.onclick = () => runProject(b.dataset.runp, b));
@@ -546,11 +551,16 @@ $("#refresh").onclick = () => { state.apks = null; load(); };
 document.addEventListener("visibilitychange", () => { if (!document.hidden && !typing()) load(true); });
 setInterval(() => { if (!document.hidden && (state.tab === "tasks" || state.tab === "bugs") && !typing()) load(true); }, 60000);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
-// เปิดจาก widget/ทางลัดบนหน้าจอโฮม: #bugs = แท็บ 🐞, #newbug = ฟอร์มจดบั๊กพร้อมพิมพ์
+// เปิดจาก widget/ทางลัดบนหน้าจอโฮม: #bugs / #newbug = แท็บ 🐞 (ฟอร์มจดบั๊ก), #tasks / #newtask = แท็บงาน (ฟอร์มเพิ่มฟีเจอร์), #open-<id> = เปิดงานนั้น
 function fromHash() {
-  const h = location.hash.slice(1); if (h !== "bugs" && h !== "newbug") return;
+  const h = decodeURIComponent(location.hash.slice(1)), m = h.match(/^open-(.+)$/);
+  if (!m && !["bugs", "newbug", "tasks", "newtask"].includes(h)) return;
   history.replaceState(null, "", location.pathname + location.search);
-  state.tab = "bugs"; state.open = null; state.bugFilter = "open"; state.focusBug = h === "newbug"; render();
+  state.open = null; state.draft = null;
+  if (m) { state.pendingOpen = m[1]; state.tab = state.tasks?.find(t => t.id === m[1])?.kind === "bug" ? "bugs" : "tasks"; }
+  else if (h.endsWith("bug") || h === "bugs") { state.tab = "bugs"; state.bugFilter = "open"; state.focusBug = h === "newbug"; }
+  else { state.tab = "tasks"; state.focusTask = h === "newtask"; }
+  render();
 }
 window.addEventListener("hashchange", fromHash);
 fromHash(); render(); load(true);

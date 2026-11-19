@@ -32,7 +32,7 @@ public class MainActivity extends BridgeActivity {
     private void openFromWidget(Intent intent) {
         if (intent == null || getBridge() == null) return;
         final String hash = intent.getStringExtra(EXTRA_HASH);
-        if (hash == null || !hash.matches("[a-z]+")) return;
+        if (hash == null || !hash.matches("[A-Za-z0-9_-]+")) return;
         intent.removeExtra(EXTRA_HASH);
         final WebView wv = getBridge().getWebView();
         final String local = getBridge().getLocalUrl();
