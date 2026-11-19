@@ -33,7 +33,7 @@ label{display:block;font-size:14px;color:var(--mute);margin:10px 0 4px}
 .mute{color:var(--mute);font-size:14px}
 .step{display:flex;gap:8px;padding:4px 0}
 .log{border-left:3px solid var(--line);padding:4px 10px;margin:8px 0;white-space:pre-wrap;word-break:break-word}
-.log.user{border-color:var(--acc)}.log.system{border-color:var(--warn)}
+.pics{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}.pics:empty{display:none}.pic{position:relative;display:block}.pic img{width:72px;height:72px;object-fit:cover;border-radius:10px;border:1px solid var(--line);display:block}.pic button{position:absolute;top:-6px;right:-6px;width:24px;height:24px;min-height:0;padding:0;border-radius:50%;font-size:14px;line-height:1}.picbtn{display:inline-flex;align-items:center;gap:6px;cursor:pointer;margin-top:8px}.log.user{border-color:var(--acc)}.log.system{border-color:var(--warn)}
 nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
 nav button{flex:1;border:0;border-radius:0;padding:8px 2px;background:none;font-size:12px;white-space:nowrap;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0}
 nav button b{font-size:20px;font-weight:400;line-height:1}
@@ -112,6 +112,60 @@ async function mutate(name, fn, msg, dflt) {
   }
   throw new Error("บันทึกไม่สำเร็จ ลองใหม่อีกครั้ง");
 }
+// ---------- 🖼 แนบรูปให้ AI ดู ----------
+const pics = {}, picBusy = {};        // รูปที่เลือกไว้แต่ยังไม่ส่ง แยกตามฟอร์ม (อยู่รอดแม้หน้าถูกวาดใหม่) / จำนวนที่กำลังย่ออยู่
+const MAX_PICS = 6;
+async function shrinkPic(file) {      // ย่อเหลือด้านยาวสุด 1600px เป็น JPEG ให้ repo ไม่บวม
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => bad(new Error("เปิดรูปไม่ได้")); i.src = url; });
+    const k = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement("canvas"); c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+    const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
+    const dataUrl = c.toDataURL("image/jpeg", 0.82);
+    return { dataUrl, b64: dataUrl.split(",")[1] };
+  } finally { URL.revokeObjectURL(url); }
+}
+const SAFE_ID = /^[A-Za-z0-9_-]+$/;
+const picField = key => `<div class="pics" data-pk="${esc(key)}"></div>
+  <label class="btn picbtn">🖼 แนบรูป<input type="file" accept="image/*" multiple data-pick="${esc(key)}" hidden></label>`;
+function drawPics(key) {
+  document.querySelectorAll(`[data-pk="${CSS.escape(key)}"]`).forEach(box => {
+    box.innerHTML = (pics[key] || []).map((p, i) => `<span class="pic"><img src="${p.dataUrl}" alt=""><button type="button" data-unpic="${i}" aria-label="เอารูปออก">×</button></span>`).join("");
+    box.querySelectorAll("[data-unpic]").forEach(b => b.onclick = () => { pics[key].splice(+b.dataset.unpic, 1); drawPics(key); });
+  });
+}
+function bindPics(root) {
+  root.querySelectorAll("[data-pick]").forEach(inp => {
+    const key = inp.dataset.pick; drawPics(key);
+    inp.onchange = async () => {
+      const files = [...inp.files]; inp.value = "";
+      const room = MAX_PICS - (pics[key] ||= []).length - (picBusy[key] || 0);
+      if (files.length > room) toast(`แนบได้สูงสุด ${MAX_PICS} รูป`);
+      const take = files.slice(0, Math.max(0, room));
+      picBusy[key] = (picBusy[key] || 0) + take.length;           // จองช่องไว้ก่อน กันเลือกซ้อนกันจนเกินจำนวน
+      for (const f of take) {
+        try { (pics[key] ||= []).push(await shrinkPic(f)); } catch (e) { toast(e.message); }
+        finally { picBusy[key]--; }
+        drawPics(key);
+      }
+    };
+  });
+}
+// อัปโหลดรูปที่เลือกไว้ (สำเนา ณ ตอนกดส่ง) ไป attachments/<งาน>/ คืน { paths, done } — เรียก done() หลังบันทึกงานสำเร็จเท่านั้น
+async function uploadPics(key, tid) {
+  if (picBusy[key]) throw new Error("รอรูปโหลดเสร็จก่อน แล้วกดอีกครั้ง");
+  if (!SAFE_ID.test(tid)) throw new Error("รหัสงานไม่ถูกต้อง");
+  const snap = [...(pics[key] || [])], paths = [];
+  for (const [i, p] of snap.entries()) {
+    const path = `attachments/${tid}/${Date.now().toString(36)}-${i}.jpg`;
+    await gh(`/contents/${path}`, { method: "PUT", signal: AbortSignal.timeout(60000),
+      body: JSON.stringify({ message: `app: แนบรูป ${tid}`, branch: S.branch || "main", content: p.b64 }) });
+    paths.push(path);
+  }
+  return { paths, done: () => { pics[key] = (pics[key] || []).filter(p => !snap.includes(p)); drawPics(key); } };
+}
+const picThumbs = list => (list || []).length ? `<div class="pics">${list.map(x => `<a class="pic" href="https://github.com/${esc(S.owner)}/${esc(S.repo)}/blob/${esc(S.branch || "main")}/${esc(x)}" target="_blank" rel="noopener"><img loading="lazy" alt="รูปแนบ" src="https://raw.githubusercontent.com/${esc(S.owner)}/${esc(S.repo)}/${esc(S.branch || "main")}/${esc(x)}"></a>`).join("")}</div>` : "";
 
 async function load(quiet) {
   if (!S.token) return render();
@@ -188,6 +242,7 @@ function vTasks() {
       <input id="nt" placeholder="${sel === "__new" ? "เช่น ทำแอปจดรายรับรายจ่ายแบบง่าย" : "เช่น เพิ่มหน้ากราฟสรุปรายเดือน"}">
       <label for="nd">รายละเอียด (ไม่บังคับ)</label>
       <textarea id="nd" placeholder="เป้าหมาย ความต้องการ ข้อจำกัด ตัวอย่างที่ชอบ…"></textarea>
+      ${picField("new")}
       <label for="nm">โมเดล AI</label>
       <select id="nm">${modelOpts(draft.nm, "ใช้โมเดลหลัก" + (state.config?.default_model ? ` (${modelName(state.config.default_model)})` : " (ค่าเริ่มต้น)"))}</select>
       <div class="row" style="margin-top:10px"><label class="row" style="margin:0;color:var(--ink)"><input type="checkbox" id="now" style="width:20px;height:20px"> ทำทันที</label>
@@ -214,6 +269,7 @@ function vTasks() {
       </div>`; }).join("")}`;
   $("#nt").value = draft.nt; $("#nd").value = draft.nd; $("#np").value = draft.np;
   if (state.focusTask) { state.focusTask = false; $("#nt").focus(); $("#nt").scrollIntoView({ block: "center" }); }
+  bindPics(v);
   $("#ps").onchange = e => { state.newProj = e.target.value; vTasks(); };
   $("#goimp").onclick = e => { e.preventDefault(); state.tab = "settings"; render(); setTimeout(() => $("#imp")?.scrollIntoView({ behavior: "smooth" }), 50); };
   document.querySelectorAll("[data-runp]").forEach(b => b.onclick = () => runProject(b.dataset.runp, b));
@@ -226,11 +282,13 @@ function vTasks() {
     $("#add").disabled = true;
     try {
       const id = "t" + Date.now().toString(36);
+      const up = await uploadPics("new", id), images = up.paths;
       const d = await mutate("tasks.json", x => {
         x.projects ||= [];
         if (pname) x.projects.push({ id: pid, name: pname, created: nowIso() });
-        x.tasks.push({ id, project: pid, title, detail, model, model_at: nowIso(), status: "todo", plan: [], log: [], created: nowIso(), updated: nowIso() });
+        x.tasks.push({ id, project: pid, title, detail, model, model_at: nowIso(), status: "todo", plan: [], log: [], created: nowIso(), updated: nowIso(), ...(images.length ? { images } : {}) });
       }, `app: เพิ่มงาน ${title}`);
+      up.done();
       state.tasks = d.tasks.filter(x => !x.deleted); state.projects = d.projects || []; state.newProj = pid;
       $("#nt").value = ""; $("#nd").value = ""; $("#np").value = ""; $("#nm").value = "";
       if (runNow) await runProject(pid); else toast("เพิ่มงานแล้ว AI จะทำในช่วงเวลาที่ตั้งไว้");
@@ -263,15 +321,16 @@ function vTask(t) {
       ${(state.apks||{})[projOf(t)] ? `<a class="btn" href="${esc(state.apks[projOf(t)])}">📱 ดาวน์โหลด APK</a>` : ""}
       <a class="btn" href="https://github.com/${esc(S.owner)}/${esc(S.repo)}/tree/${esc(S.branch||"main")}/workspace/${esc(projOf(t))}" target="_blank" rel="noopener">📁 ไฟล์ทั้งหมด</a></div>`}
     </div>
+    ${(t.images || []).length ? `<div class="card"><b>🖼 รูปประกอบ</b>${picThumbs(t.images)}</div>` : ""}
     <div class="card"><b>แผนที่ AI วิเคราะห์</b>
       ${(t.plan||[]).length ? t.plan.map((s,i) => `<div class="step">${s.done?"✅":"⬜"} <span>${i+1}. ${esc(s.text)}</span></div>`).join("") : `<p class="mute">AI จะวิเคราะห์และแตกเป็นขั้นตอนเมื่อเริ่มทำงานนี้</p>`}
     </div>
     <div class="card"><b>ส่งข้อความถึง AI</b>
       <textarea id="msg" placeholder="${t.status==="blocked" ? "ตอบสิ่งที่ AI ต้องการ แล้ว AI จะทำต่อ" : "เพิ่มคำสั่ง แก้ไข หรือให้ข้อมูลเพิ่ม"}"></textarea>
-      <div class="row" style="margin-top:8px"><span class="grow"></span><button class="primary" id="send">ส่ง</button></div>
+      <div class="row" style="margin-top:0">${picField("msg-" + t.id)}<span class="grow"></span><button class="primary" id="send">ส่ง</button></div>
     </div>
     <div class="card"><b>บันทึกการทำงาน</b>
-      ${(t.log||[]).length ? [...t.log].reverse().map(l => `<div class="log ${esc(l.by)}"><div class="mute">${l.by==="user"?"คุณ":l.by==="system"?"ระบบ":"AI"} · ${fmt(l.time)}</div>${esc(l.text)}</div>`).join("") : `<p class="mute">ยังไม่มีบันทึก</p>`}
+      ${(t.log||[]).length ? [...t.log].reverse().map(l => `<div class="log ${esc(l.by)}"><div class="mute">${l.by==="user"?"คุณ":l.by==="system"?"ระบบ":"AI"} · ${fmt(l.time)}</div>${esc(l.text)}${picThumbs(l.images)}</div>`).join("") : `<p class="mute">ยังไม่มีบันทึก</p>`}
     </div>
     <div class="row">
       ${!["done"].includes(t.status) ? `<button class="primary" id="runone">▶ ทำงานนี้เลย</button>` : ""}
@@ -285,8 +344,17 @@ function vTask(t) {
     upd(it => { it.model = state.modelSel[t.id]; it.model_at = nowIso(); }, "app: เปลี่ยนโมเดล", "เปลี่ยนโมเดลแล้ว — มีผลตั้งแต่รอบถัดไป"); };
   loadApks(() => state.open === t.id && render());
   $("#askt").onclick = () => { state.chatScope = projOf(t); state.open = null; state.tab = "chat"; render(); };
-  $("#send").onclick = () => { const m = $("#msg").value.trim(); if (!m) return;
-    upd(it => { (it.log ||= []).push({ time: nowIso(), by: "user", text: m }); if (it.status === "blocked" || it.status === "done") it.status = "doing"; }, "app: ข้อความถึง AI", "ส่งแล้ว"); };
+  bindPics(v);
+  $("#send").onclick = async () => { const m = $("#msg").value.trim(), pk = "msg-" + t.id; if (!m && !(pics[pk] || []).length) return;
+    $("#send").disabled = true;
+    try {
+      const up = await uploadPics(pk, t.id), images = up.paths;
+      const d = await mutate("tasks.json", x => { const it = x.tasks.find(y => y.id === t.id);
+        (it.log ||= []).push({ time: nowIso(), by: "user", text: m || "(แนบรูป)", ...(images.length ? { images } : {}) });
+        if (it.status === "blocked" || it.status === "done") it.status = "doing"; it.updated = nowIso(); }, "app: ข้อความถึง AI");
+      up.done(); if ($("#msg")) $("#msg").value = "";
+      state.tasks = d.tasks.filter(x => !x.deleted); toast("ส่งแล้ว"); render();
+    } catch (e) { toast("ส่งไม่สำเร็จ: " + e.message); if ($("#send")) $("#send").disabled = false; } };
   $("#redo") && ($("#redo").onclick = () => confirmBtn($("#redo"), () => upd(it => { it.status = "todo"; it.plan = []; (it.log ||= []).push({ time: nowIso(), by: "user", text: "ขอให้เริ่มทำใหม่ตั้งแต่ต้น" }); }, "app: เริ่มใหม่", "ตั้งให้ทำใหม่แล้ว")));
   $("#runone") && ($("#runone").onclick = async () => { $("#runone").disabled = true;
     try {
@@ -317,6 +385,7 @@ function vBugs() {
       <label for="bt">บั๊กคืออะไร</label><input id="bt" placeholder="เช่น กดบันทึกแล้วข้อมูลหาย">
       <label for="bs">ทำยังไงถึงเจอ (ไม่บังคับ)</label><textarea id="bs" style="min-height:70px" placeholder="1. เปิดหน้า… 2. กด… 3. เห็นว่า…"></textarea>
       <label for="be">ควรเป็นยังไง (ไม่บังคับ)</label><input id="be" placeholder="เช่น ข้อมูลควรยังอยู่หลังปิดแอป">
+      ${picField("bug")}
       <label for="bv">ความรุนแรง</label><select id="bv">${SEV.map(([k, l]) => `<option value="${k}" ${k === d.bv ? "selected" : ""}>${l}</option>`).join("")}</select>
       <div class="row" style="margin-top:10px"><label class="row" style="margin:0;color:var(--ink)"><input type="checkbox" id="bnow" style="width:20px;height:20px"> แก้ทันที</label>
         <span class="grow"></span><button class="primary" id="badd">+ จดบั๊ก</button></div>
@@ -330,6 +399,7 @@ function vBugs() {
           <div class="mute">${t.pr ? "🔀 มี PR · " : ""}แจ้ง ${fmt(t.created)}${t.status === "done" ? " · แก้เสร็จ " + fmt(t.updated) : ""}</div>
         </div>`).join("")}</div>`).join("")}`;
   $("#bt").value = d.bt; $("#bs").value = d.bs; $("#be").value = d.be;
+  bindPics(v);
   if (state.focusBug) { state.focusBug = false; $("#bt").focus(); $("#bt").scrollIntoView({ block: "center" }); }
   $("#bp").onchange = e => { state.bugProj = e.target.value; };
   v.querySelectorAll("[data-f]").forEach(c => c.onclick = () => { state.bugFilter = c.dataset.f; vBugs(); });
@@ -342,8 +412,10 @@ function vBugs() {
     $("#badd").disabled = true;
     try {
       const id = "b" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      const up = await uploadPics("bug", id), images = up.paths;
       const dd = await mutate("tasks.json", x => { x.tasks.push({ id, project: pid, kind: "bug", severity, title, detail, model: "", model_at: nowIso(),
-        status: "todo", plan: [], log: [], created: nowIso(), updated: nowIso() }); }, `app: แจ้งบั๊ก ${title}`);
+        status: "todo", plan: [], log: [], created: nowIso(), updated: nowIso(), ...(images.length ? { images } : {}) }); }, `app: แจ้งบั๊ก ${title}`);
+      up.done();
       state.tasks = dd.tasks.filter(x => !x.deleted); state.bugProj = pid;
       $("#bt").value = $("#bs").value = $("#be").value = "";
       if (runNow) {                          // สั่งแก้บั๊กนี้ตัวเดียวทันที (ไม่ต้องรองานอื่นในโปรเจค)
