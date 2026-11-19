@@ -324,10 +324,6 @@
       ],
       "created": "2026-11-19T04:51:54Z",
       "updated": "2026-11-19T04:59:10Z",
-      "lock": {
-        "run": "44461217083",
-        "at": "2026-11-19T04:52:10Z"
-      },
       "pr": "https://github.com/pollycode1/classclick/pull/9"
     },
     {
@@ -387,10 +383,6 @@
       ],
       "created": "2026-11-19T04:54:33Z",
       "updated": "2026-11-19T05:07:56Z",
-      "lock": {
-        "run": "44461217083",
-        "at": "2026-11-19T04:59:12Z"
-      },
       "pr": "https://github.com/pollycode1/classclick/pull/10"
     }
   ]
