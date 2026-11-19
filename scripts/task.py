@@ -41,6 +41,8 @@ def main(argv):
             rest.remove("--bug"); kind = "bug"; severity = "normal"
         if "--severity" in rest:
             k = rest.index("--severity"); severity = rest[k + 1]; del rest[k:k + 2]
+            if not kind:
+                raise SystemExit("--severity ใช้ได้เฉพาะกับ --bug")
             if severity not in ("high", "normal", "low"):
                 raise SystemExit("severity ต้องเป็น high, normal หรือ low")
         if "--project" in rest:

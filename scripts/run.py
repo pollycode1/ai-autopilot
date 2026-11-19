@@ -191,7 +191,7 @@ def next_task(only=None):
             and (not only or t.get("id") == only) and (not ONLY_PROJECT or project_of(t) == ONLY_PROJECT)
             and not locked_by_other(data, project_of(t))]
     rank = {"testing": 0, "doing": 1, "planning": 2, "todo": 3}
-    sev = {"high": 0, "normal": 1, "low": 2}   # บั๊กด่วนมาก่อนงานอื่นที่สถานะเดียวกัน
+    sev = {"high": 0, "normal": 1.5, "low": 2}   # เฉพาะบั๊กด่วนแซงงานอื่นที่สถานะเดียวกัน (งานทั่วไป = 1.5)
     live.sort(key=lambda t: (rank.get(t.get("status", "todo"), 3),
                              sev.get(t.get("severity"), 1) if t.get("kind") == "bug" else 1.5))
     return live[0] if live else None

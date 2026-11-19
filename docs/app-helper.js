@@ -45,7 +45,8 @@
       const key = $("#aph-key").value.trim(), msg = $("#aph-msg").value.trim();
       if (!key || !msg) { $("#aph-st").textContent = "ใส่ key และข้อความก่อน"; return; }
       store.set("ap-key", key); $("#aph-send").disabled = true; $("#aph-st").textContent = "กำลังส่ง…";
-      try { await requestUpdate(key, msg, $("#aph-type").value === "bug"); $("#aph-msg").value = ""; $("#aph-st").textContent = "✅ ส่งแล้ว AI เริ่มทำงานภายในไม่กี่นาที (ดูความคืบหน้าในแอป Autopilot)"; }
+      try { const started = await requestUpdate(key, msg, $("#aph-type").value === "bug"); $("#aph-msg").value = "";
+        $("#aph-st").textContent = started ? "✅ ส่งแล้ว AI เริ่มทำงานภายในไม่กี่นาที (ดูความคืบหน้าในแอป Autopilot)" : "✅ บันทึกแล้ว AI จะทำในรอบถัดไป (สั่งเริ่มทันทีไม่ได้ — key อาจไม่มีสิทธิ์ Actions)"; }
       catch (e) { $("#aph-st").textContent = "❌ " + (e.status === 401 ? "key ไม่ถูกต้องหรือหมดอายุ" : e.status === 403 || e.status === 404 ? "key ไม่มีสิทธิ์เข้าถึง repo นี้" : e.message); }
       $("#aph-send").disabled = false;
     };
@@ -60,7 +61,7 @@
   const b64d = s => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\n/g, "")), c => c.charCodeAt(0)));
   async function requestUpdate(key, msg, bug) {
     const now = new Date().toISOString().replace(/\.\d+Z$/, "Z");
-    const id = "t" + Date.now().toString(36);
+    const id = "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     for (let i = 0; i < 4; i++) {
       const j = await gh(key, "/contents/tasks.json");
       const d = JSON.parse(b64d(j.content));
@@ -75,7 +76,9 @@
         break;
       } catch (e) { if (e.status !== 409 && e.status !== 422 || i === 3) throw e; await new Promise(r => setTimeout(r, 1000)); }
     }
-    await gh(key, "/actions/workflows/autopilot.yml/dispatches", { method: "POST", body: JSON.stringify({ ref: "main", inputs: { force: true, project: APP } }) });
+    // บันทึกแล้ว: ถ้าสั่งเริ่มทันทีไม่ได้ ก็ยังถือว่าส่งสำเร็จ (AI จะทำในรอบถัดไป) ไม่ให้ผู้ใช้กดส่งซ้ำ
+    try { await gh(key, "/actions/workflows/autopilot.yml/dispatches", { method: "POST", body: JSON.stringify({ ref: "main", inputs: { force: true, task: id } }) }); return true; }
+    catch { return false; }
   }
   // 2) แจ้งเตือน APK ใหม่ (เฉพาะตอนเปิดจากไฟล์ APK)
   function checkApk() {
