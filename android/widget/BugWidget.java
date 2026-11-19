@@ -60,6 +60,7 @@ public class BugWidget extends AppWidgetProvider {
             p.edit().putString("data", data).putString("at", at).apply();
             draw(c, mgr, ids, data, at);
         } catch (Exception e) {
+            android.util.Log.w("BugWidget", "refresh failed", e);
             draw(c, mgr, ids, cached, at == null ? "ออฟไลน์" : "ออฟไลน์ " + at);
         }
     }
@@ -87,10 +88,11 @@ public class BugWidget extends AppWidgetProvider {
         for (int i = 0; i < Math.min(ROWS, open.size()); i++) {
             JSONObject t = open.get(i);
             String pid = t.optString("project", ""); if (pid.isEmpty()) pid = t.optString("id");
+            String proj = names.optString(pid, "");
             boolean bug = "bug".equals(t.optString("kind"));
             String icon = bug ? ("high".equals(t.optString("severity")) ? "🔴" : "🐞") : "✨";
             rows.put(new JSONObject().put("id", t.optString("id"))
-                .put("text", icon + " " + t.optString("title") + "  · " + names.optString(pid, pid)));
+                .put("text", icon + " " + t.optString("title") + (proj.isEmpty() ? "" : "  · " + proj)));
         }
         return new JSONObject().put("bugs", bugs).put("feats", feats).put("rows", rows).toString();
     }

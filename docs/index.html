@@ -130,8 +130,10 @@ async function load(quiet) {
 // ---------- Views ----------
 function render() {
   if (state.pendingOpen && state.tasks) {        // เปิดงานจาก widget หลังโหลดรายการเสร็จ
-    const t = state.tasks.find(t => t.id === state.pendingOpen); state.pendingOpen = null;
-    if (t) { state.tab = t.kind === "bug" ? "bugs" : "tasks"; state.open = t.id; }
+    const t = state.tasks.find(t => t.id === state.pendingOpen);
+    if (t) { state.pendingOpen = null; state.tab = t.kind === "bug" ? "bugs" : "tasks"; state.open = t.id; }
+    else if (!state.pendingRetried) { state.pendingRetried = true; load(true); }   // งานเพิ่งเพิ่ม: โหลดรายการใหม่อีกครั้ง
+    else state.pendingOpen = null;
   }
   document.querySelectorAll("nav button").forEach(b => b.classList.toggle("on", b.dataset.tab === state.tab));
   if (!S.token && state.tab !== "settings") state.tab = "settings";
@@ -553,10 +555,11 @@ setInterval(() => { if (!document.hidden && (state.tab === "tasks" || state.tab 
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 // เปิดจาก widget/ทางลัดบนหน้าจอโฮม: #bugs / #newbug = แท็บ 🐞 (ฟอร์มจดบั๊ก), #tasks / #newtask = แท็บงาน (ฟอร์มเพิ่มฟีเจอร์), #open-<id> = เปิดงานนั้น
 function fromHash() {
-  const h = decodeURIComponent(location.hash.slice(1)), m = h.match(/^open-(.+)$/);
+  let h = location.hash.slice(1); try { h = decodeURIComponent(h); } catch { return; }
+  const m = h.match(/^open-(.+)$/);
   if (!m && !["bugs", "newbug", "tasks", "newtask"].includes(h)) return;
   history.replaceState(null, "", location.pathname + location.search);
-  state.open = null; state.draft = null;
+  state.open = null; state.draft = null; state.pendingOpen = null; state.pendingRetried = false;
   if (m) { state.pendingOpen = m[1]; state.tab = state.tasks?.find(t => t.id === m[1])?.kind === "bug" ? "bugs" : "tasks"; }
   else if (h.endsWith("bug") || h === "bugs") { state.tab = "bugs"; state.bugFilter = "open"; state.focusBug = h === "newbug"; }
   else { state.tab = "tasks"; state.focusTask = h === "newtask"; }
