@@ -113,7 +113,7 @@ async function mutate(name, fn, msg, dflt) {
   throw new Error("บันทึกไม่สำเร็จ ลองใหม่อีกครั้ง");
 }
 // ---------- 🖼 แนบรูปให้ AI ดู ----------
-const pics = {};                      // รูปที่เลือกไว้แต่ยังไม่ส่ง แยกตามฟอร์ม (อยู่รอดแม้หน้าถูกวาดใหม่)
+const pics = {}, picBusy = {};        // รูปที่เลือกไว้แต่ยังไม่ส่ง แยกตามฟอร์ม (อยู่รอดแม้หน้าถูกวาดใหม่) / จำนวนที่กำลังย่ออยู่
 const MAX_PICS = 6;
 async function shrinkPic(file) {      // ย่อเหลือด้านยาวสุด 1600px เป็น JPEG ให้ repo ไม่บวม
   const url = URL.createObjectURL(file);
@@ -126,10 +126,11 @@ async function shrinkPic(file) {      // ย่อเหลือด้านย
     return { dataUrl, b64: dataUrl.split(",")[1] };
   } finally { URL.revokeObjectURL(url); }
 }
-const picField = key => `<div class="pics" data-pk="${key}"></div>
-  <label class="btn picbtn">🖼 แนบรูป<input type="file" accept="image/*" multiple data-pick="${key}" hidden></label>`;
+const SAFE_ID = /^[A-Za-z0-9_-]+$/;
+const picField = key => `<div class="pics" data-pk="${esc(key)}"></div>
+  <label class="btn picbtn">🖼 แนบรูป<input type="file" accept="image/*" multiple data-pick="${esc(key)}" hidden></label>`;
 function drawPics(key) {
-  document.querySelectorAll(`[data-pk="${key}"]`).forEach(box => {
+  document.querySelectorAll(`[data-pk="${CSS.escape(key)}"]`).forEach(box => {
     box.innerHTML = (pics[key] || []).map((p, i) => `<span class="pic"><img src="${p.dataUrl}" alt=""><button type="button" data-unpic="${i}" aria-label="เอารูปออก">×</button></span>`).join("");
     box.querySelectorAll("[data-unpic]").forEach(b => b.onclick = () => { pics[key].splice(+b.dataset.unpic, 1); drawPics(key); });
   });
@@ -138,23 +139,31 @@ function bindPics(root) {
   root.querySelectorAll("[data-pick]").forEach(inp => {
     const key = inp.dataset.pick; drawPics(key);
     inp.onchange = async () => {
-      const list = (pics[key] ||= []);
-      for (const f of inp.files) {
-        if (list.length >= MAX_PICS) { toast(`แนบได้สูงสุด ${MAX_PICS} รูป`); break; }
-        try { list.push(await shrinkPic(f)); } catch (e) { toast(e.message); }
+      const files = [...inp.files]; inp.value = "";
+      const room = MAX_PICS - (pics[key] ||= []).length - (picBusy[key] || 0);
+      if (files.length > room) toast(`แนบได้สูงสุด ${MAX_PICS} รูป`);
+      const take = files.slice(0, Math.max(0, room));
+      picBusy[key] = (picBusy[key] || 0) + take.length;           // จองช่องไว้ก่อน กันเลือกซ้อนกันจนเกินจำนวน
+      for (const f of take) {
+        try { (pics[key] ||= []).push(await shrinkPic(f)); } catch (e) { toast(e.message); }
+        finally { picBusy[key]--; }
+        drawPics(key);
       }
-      inp.value = ""; drawPics(key);
     };
   });
 }
-async function uploadPics(key, tid) {  // อัปโหลดรูปไป attachments/<งาน>/ แล้วคืน path ให้เก็บในงาน
-  const out = [];
-  for (const [i, p] of (pics[key] || []).entries()) {
+// อัปโหลดรูปที่เลือกไว้ (สำเนา ณ ตอนกดส่ง) ไป attachments/<งาน>/ คืน { paths, done } — เรียก done() หลังบันทึกงานสำเร็จเท่านั้น
+async function uploadPics(key, tid) {
+  if (picBusy[key]) throw new Error("รอรูปโหลดเสร็จก่อน แล้วกดอีกครั้ง");
+  if (!SAFE_ID.test(tid)) throw new Error("รหัสงานไม่ถูกต้อง");
+  const snap = [...(pics[key] || [])], paths = [];
+  for (const [i, p] of snap.entries()) {
     const path = `attachments/${tid}/${Date.now().toString(36)}-${i}.jpg`;
-    await gh(`/contents/${path}`, { method: "PUT", body: JSON.stringify({ message: `app: แนบรูป ${tid}`, branch: S.branch || "main", content: p.b64 }) });
-    out.push(path);
+    await gh(`/contents/${path}`, { method: "PUT", signal: AbortSignal.timeout(60000),
+      body: JSON.stringify({ message: `app: แนบรูป ${tid}`, branch: S.branch || "main", content: p.b64 }) });
+    paths.push(path);
   }
-  return out;
+  return { paths, done: () => { pics[key] = (pics[key] || []).filter(p => !snap.includes(p)); drawPics(key); } };
 }
 const picThumbs = list => (list || []).length ? `<div class="pics">${list.map(x => `<a class="pic" href="https://github.com/${esc(S.owner)}/${esc(S.repo)}/blob/${esc(S.branch || "main")}/${esc(x)}" target="_blank" rel="noopener"><img loading="lazy" alt="รูปแนบ" src="https://raw.githubusercontent.com/${esc(S.owner)}/${esc(S.repo)}/${esc(S.branch || "main")}/${esc(x)}"></a>`).join("")}</div>` : "";
 
@@ -273,13 +282,13 @@ function vTasks() {
     $("#add").disabled = true;
     try {
       const id = "t" + Date.now().toString(36);
-      const images = await uploadPics("new", id);
+      const up = await uploadPics("new", id), images = up.paths;
       const d = await mutate("tasks.json", x => {
         x.projects ||= [];
         if (pname) x.projects.push({ id: pid, name: pname, created: nowIso() });
         x.tasks.push({ id, project: pid, title, detail, model, model_at: nowIso(), status: "todo", plan: [], log: [], created: nowIso(), updated: nowIso(), ...(images.length ? { images } : {}) });
       }, `app: เพิ่มงาน ${title}`);
-      pics.new = [];
+      up.done();
       state.tasks = d.tasks.filter(x => !x.deleted); state.projects = d.projects || []; state.newProj = pid;
       $("#nt").value = ""; $("#nd").value = ""; $("#np").value = ""; $("#nm").value = "";
       if (runNow) await runProject(pid); else toast("เพิ่มงานแล้ว AI จะทำในช่วงเวลาที่ตั้งไว้");
@@ -338,10 +347,14 @@ function vTask(t) {
   bindPics(v);
   $("#send").onclick = async () => { const m = $("#msg").value.trim(), pk = "msg-" + t.id; if (!m && !(pics[pk] || []).length) return;
     $("#send").disabled = true;
-    let images = [];
-    try { images = await uploadPics(pk, t.id); } catch (e) { $("#send").disabled = false; return toast("อัปโหลดรูปไม่สำเร็จ: " + e.message); }
-    pics[pk] = [];
-    upd(it => { (it.log ||= []).push({ time: nowIso(), by: "user", text: m || "(แนบรูป)", ...(images.length ? { images } : {}) }); if (it.status === "blocked" || it.status === "done") it.status = "doing"; }, "app: ข้อความถึง AI", "ส่งแล้ว"); };
+    try {
+      const up = await uploadPics(pk, t.id), images = up.paths;
+      const d = await mutate("tasks.json", x => { const it = x.tasks.find(y => y.id === t.id);
+        (it.log ||= []).push({ time: nowIso(), by: "user", text: m || "(แนบรูป)", ...(images.length ? { images } : {}) });
+        if (it.status === "blocked" || it.status === "done") it.status = "doing"; it.updated = nowIso(); }, "app: ข้อความถึง AI");
+      up.done(); if ($("#msg")) $("#msg").value = "";
+      state.tasks = d.tasks.filter(x => !x.deleted); toast("ส่งแล้ว"); render();
+    } catch (e) { toast("ส่งไม่สำเร็จ: " + e.message); if ($("#send")) $("#send").disabled = false; } };
   $("#redo") && ($("#redo").onclick = () => confirmBtn($("#redo"), () => upd(it => { it.status = "todo"; it.plan = []; (it.log ||= []).push({ time: nowIso(), by: "user", text: "ขอให้เริ่มทำใหม่ตั้งแต่ต้น" }); }, "app: เริ่มใหม่", "ตั้งให้ทำใหม่แล้ว")));
   $("#runone") && ($("#runone").onclick = async () => { $("#runone").disabled = true;
     try {
@@ -399,10 +412,10 @@ function vBugs() {
     $("#badd").disabled = true;
     try {
       const id = "b" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-      const images = await uploadPics("bug", id);
+      const up = await uploadPics("bug", id), images = up.paths;
       const dd = await mutate("tasks.json", x => { x.tasks.push({ id, project: pid, kind: "bug", severity, title, detail, model: "", model_at: nowIso(),
         status: "todo", plan: [], log: [], created: nowIso(), updated: nowIso(), ...(images.length ? { images } : {}) }); }, `app: แจ้งบั๊ก ${title}`);
-      pics.bug = [];
+      up.done();
       state.tasks = dd.tasks.filter(x => !x.deleted); state.bugProj = pid;
       $("#bt").value = $("#bs").value = $("#be").value = "";
       if (runNow) {                          // สั่งแก้บั๊กนี้ตัวเดียวทันที (ไม่ต้องรองานอื่นในโปรเจค)
