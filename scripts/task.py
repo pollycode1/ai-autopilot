@@ -10,6 +10,7 @@
   python3 scripts/task.py add "ชื่องาน" "รายละเอียด" --project <id โปรเจคเดิม>
   python3 scripts/task.py add "ชื่องาน" "รายละเอียด" --new-project "ชื่อโปรเจคใหม่"
       (ใส่ --model <sonnet|opus|haiku> เพิ่มได้ ถ้าต้องการเลือกโมเดลของงานนี้)
+      (ใส่ --bug [--severity high|normal|low] ถ้าเป็นการแจ้งบั๊กให้ AI แก้)
   python3 scripts/task.py model <id> <sonnet|opus|haiku|default>
 """
 import sys, json
@@ -35,6 +36,15 @@ def main(argv):
             k = rest.index("--model"); model = rest[k + 1]; del rest[k:k + 2]
             if model != "default" and not valid_model(model):
                 raise SystemExit("โมเดลต้องเป็น sonnet, opus, haiku, default หรือชื่อเต็ม claude-…")
+        kind, severity = "", ""
+        if "--bug" in rest:
+            rest.remove("--bug"); kind = "bug"; severity = "normal"
+        if "--severity" in rest:
+            k = rest.index("--severity"); severity = rest[k + 1]; del rest[k:k + 2]
+            if not kind:
+                raise SystemExit("--severity ใช้ได้เฉพาะกับ --bug")
+            if severity not in ("high", "normal", "low"):
+                raise SystemExit("severity ต้องเป็น high, normal หรือ low")
         if "--project" in rest:
             k = rest.index("--project"); project = rest[k + 1]; del rest[k:k + 2]
         if "--new-project" in rest:
@@ -52,6 +62,8 @@ def main(argv):
             data["projects"].append({"id": project, "name": tid, "created": now()})
         data["tasks"].append({"id": nid, "project": project, "title": tid, "detail": " ".join(rest), "status": "todo", "model": "" if model == "default" else model, "model_at": now(),
                               "plan": [], "log": [], "created": now(), "updated": now()})
+        if kind:
+            data["tasks"][-1].update(kind=kind, severity=severity or "normal")
         save(data); print(nid); return
     t = find(data, tid)
     if cmd == "show":
