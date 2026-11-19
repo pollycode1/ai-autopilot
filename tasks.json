@@ -273,15 +273,62 @@
       "detail": "",
       "model": "opus",
       "model_at": "2026-11-19T04:51:54Z",
-      "status": "todo",
-      "plan": [],
-      "log": [],
+      "status": "done",
+      "plan": [
+        {
+          "text": "สร้างโมเดล ScoringConfig (โหมดความเร็ว/คะแนนคงที่ + max/min + โบนัสสตรีค + หักคะแนนตอบผิด) พร้อม toJson/fromJson/copyWith",
+          "done": true
+        },
+        {
+          "text": "เพิ่ม scoringConfig เข้า AppState: getter/setter, บันทึก/โหลดจาก SharedPreferences, exportBackup/importBackup",
+          "done": true
+        },
+        {
+          "text": "แก้ revealAnswer ให้คิดคะแนนตาม scoringConfig แทนค่าคงที่เดิม",
+          "done": true
+        },
+        {
+          "text": "เพิ่มส่วน UI 'กติกาการให้คะแนน' ในหน้า SettingsPage ให้ครูปรับเองได้",
+          "done": true
+        },
+        {
+          "text": "เขียนเทสต์สำหรับ ScoringConfig และการคิดคะแนนแต่ละโหมด",
+          "done": true
+        },
+        {
+          "text": "ทดสอบ/ลองรัน (flutter analyze/test) และแก้บัคที่เจอ",
+          "done": true
+        }
+      ],
+      "log": [
+        {
+          "time": "2026-11-19T04:53:38Z",
+          "by": "ai",
+          "text": "แนวทาง: เพิ่มโมเดล ScoringConfig ให้ครูตั้งกติกาคะแนนเองได้ (โหมดเร็วแบบ Kahoot หรือคะแนนคงที่, ปรับ max/min, โบนัสสตรีค, หักคะแนนตอบผิด) เก็บใน AppState+SharedPreferences ใช้ใน revealAnswer และมี UI ในหน้าตั้งค่า"
+        },
+        {
+          "time": "2026-11-19T04:58:28Z",
+          "by": "ai",
+          "text": "ทดสอบ: เครื่องนี้ไม่มี Flutter/Dart SDK จึงรัน 'flutter test/analyze' ไม่ได้ ตรวจด้วยการรีวิวสแตติกแทน (เช็ควงเล็บครบ, ไม่มี ref ค้างของค่าคงที่เดิม, ค่า default = Kahoot เดิมจึงเข้ากันได้ย้อนหลัง, เทียบ API กับเทสต์เดิม). เขียนเทสต์ครบ 10 เคสไว้ให้ CI/เจ้าของรัน"
+        },
+        {
+          "time": "2026-11-19T04:58:48Z",
+          "by": "ai",
+          "text": "เสร็จงาน 'เพิ่มเก็บคะแนน แบบสร้างเองได้' ครูปรับกติกาคะแนนเองได้แล้ว\nไฟล์ที่เพิ่ม/แก้ (ใน repos/classclick):\n- lib/models/scoring_config.dart (ใหม่): โมเดล ScoringConfig — โหมด speed(Kahoot)/flat(คงที่), maxPoints, minPoints, streakBonus(โบนัสตอบถูกติดกัน), wrongPenalty(หักคะแนนตอบผิด) + toJson/fromJson/copyWith/== และเมธอดคำนวณ correctBasePoints/streakBonusFor\n- lib/app_state.dart: เพิ่ม field+getter/setter scoringConfig, บันทึก/โหลดคีย์ 'scoringConfig' ใน SharedPreferences, ใส่ใน exportBackup/importBackup, และ revealAnswer() ใช้ scoringConfig คิดคะแนนแทนค่าคงที่เดิม (default เท่าเดิม 100->50 จึงไม่กระทบของเก่า)\n- lib/pages/settings_page.dart: เพิ่มส่วน 'กติกาการให้คะแนน' + ไดอะล็อก _ScoringConfigDialog ให้ครูเลือกโหมด/กรอกคะแนน มีปุ่มค่าเริ่มต้น และ validate ค่าติดลบ/min>max\n- test/scoring_config_test.dart (ใหม่): 10 เทสต์ ครอบคลุมสูตรคะแนน speed/flat, โบนัสสตรีค, หักคะแนน, roundtrip JSON, และ integration กับ AppState (flat/penalty/persist)\nวิธีใช้: เปิดแอป > ตั้งค่า > กติกาการให้คะแนน > เลือกโหมดและกรอกค่า > บันทึก\nวิธีรันเทสต์ (บนเครื่องที่มี Flutter): flutter pub get && flutter test test/scoring_config_test.dart\nหมายเหตุ: ยังไม่ได้ commit/push ตามนโยบาย ระบบจะเปิด PR ให้เจ้าของตรวจ"
+        },
+        {
+          "time": "2026-11-19T04:59:10Z",
+          "by": "system",
+          "text": "🔀 เปิด Pull Request ใน pollycode1/classclick แล้ว: https://github.com/pollycode1/classclick/pull/9"
+        }
+      ],
       "created": "2026-11-19T04:51:54Z",
-      "updated": "2026-11-19T04:51:54Z",
+      "updated": "2026-11-19T04:59:10Z",
       "lock": {
         "run": "44461217083",
         "at": "2026-11-19T04:52:10Z"
-      }
+      },
+      "pr": "https://github.com/pollycode1/classclick/pull/9"
     },
     {
       "id": "tmwn2sudg",
