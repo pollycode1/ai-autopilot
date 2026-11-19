@@ -42,7 +42,8 @@ public class BugWidget extends AppWidgetProvider {
         new Thread(() -> update(c)).start();
     }
 
-    static void update(Context c) {
+    // synchronized: รีเฟรชซ้อนกันจะทำทีละรอบ รอบล่าสุดจึงเขียนทับเสมอ (ข้อมูลเก่าไม่ทับข้อมูลใหม่)
+    static synchronized void update(Context c) {
         AppWidgetManager mgr = AppWidgetManager.getInstance(c);
         int[] ids = mgr.getAppWidgetIds(new ComponentName(c, BugWidget.class));
         if (ids == null || ids.length == 0) return;
@@ -72,7 +73,7 @@ public class BugWidget extends AppWidgetProvider {
             HttpURLConnection h = null;
             try {
                 h = (HttpURLConnection) new URL(src).openConnection();
-                h.setConnectTimeout(10000); h.setReadTimeout(15000); h.setUseCaches(false);
+                h.setConnectTimeout(4000); h.setReadTimeout(5000); h.setUseCaches(false);   // รวม 2 แหล่งไม่เกิน ~18 วิ อยู่ในเวลาที่ goAsync ให้
                 h.setRequestProperty("Accept", "application/vnd.github.raw");
                 h.setRequestProperty("User-Agent", "ai-autopilot-widget");
                 if (h.getResponseCode() != 200) throw new Exception("HTTP " + h.getResponseCode());

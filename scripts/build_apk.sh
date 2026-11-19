@@ -56,7 +56,7 @@ if [ "$ID" = "autopilot" ]; then
   python3 - <<'PY2'
 import pathlib
 m = pathlib.Path("android/app/src/main/AndroidManifest.xml"); s = m.read_text()
-r = """        <receiver android:name=".BugWidget" android:exported="false" android:label="@string/bug_widget_label">
+r = """        <receiver android:name=".BugWidget" android:exported="true" android:label="@string/bug_widget_label">
             <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/bug_widget_info" />
         </receiver>
