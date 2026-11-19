@@ -35,7 +35,11 @@ label{display:block;font-size:14px;color:var(--mute);margin:10px 0 4px}
 .log{border-left:3px solid var(--line);padding:4px 10px;margin:8px 0;white-space:pre-wrap;word-break:break-word}
 .log.user{border-color:var(--acc)}.log.system{border-color:var(--warn)}
 nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
-nav button{flex:1;border:0;border-radius:0;padding:14px 2px;background:none;font-size:14px;white-space:nowrap}
+nav button{flex:1;border:0;border-radius:0;padding:8px 2px;background:none;font-size:12px;white-space:nowrap;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0}
+nav button b{font-size:20px;font-weight:400;line-height:1}
+.chip{display:inline-block;padding:4px 12px;border-radius:99px;border:1px solid var(--line);cursor:pointer;font-size:14px}
+.chip.on{background:var(--acc);color:var(--accink);border-color:var(--acc)}
+.sev-high{color:var(--bad)}.sev-normal{color:var(--warn)}.sev-low{color:var(--mute)}
 nav button.on{color:var(--acc);font-weight:600}
 .day{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:50%;border:1px solid var(--line);cursor:pointer;user-select:none}
 .day.on{background:var(--acc);color:var(--accink);border-color:var(--acc)}
@@ -49,11 +53,12 @@ nav button.on{color:var(--acc);font-weight:600}
 <header><h1>🤖 AI Autopilot</h1><span id="sync" class="mute"></span><button id="refresh" title="รีเฟรช">⟳</button></header>
 <main id="view"></main>
 <nav id="nav">
-  <button data-tab="tasks" class="on">📋 งาน</button>
-  <button data-tab="chat">💬 ถาม</button>
-  <button data-tab="schedule">⏰ เวลา/AI</button>
-  <button data-tab="runs">⚙️ สถานะ</button>
-  <button data-tab="settings">🔑 ตั้งค่า</button>
+  <button data-tab="tasks" class="on"><b>📋</b>งาน</button>
+  <button data-tab="bugs"><b>🐞</b>บั๊ก</button>
+  <button data-tab="chat"><b>💬</b>ถาม</button>
+  <button data-tab="schedule"><b>⏰</b>เวลา/AI</button>
+  <button data-tab="runs"><b>⚙️</b>สถานะ</button>
+  <button data-tab="settings"><b>🔑</b>ตั้งค่า</button>
 </nav>
 <div id="toast"></div>
 <script>
@@ -126,7 +131,8 @@ async function load(quiet) {
 function render() {
   document.querySelectorAll("nav button").forEach(b => b.classList.toggle("on", b.dataset.tab === state.tab));
   if (!S.token && state.tab !== "settings") state.tab = "settings";
-  ({ tasks: vTasks, chat: vChat, schedule: vSchedule, runs: vRuns, settings: vSettings })[state.tab]();
+  if (state.tab === "bugs" && state.open) return vTask(state.tasks?.find(t => t.id === state.open));
+  ({ tasks: vTasks, bugs: vBugs, chat: vChat, schedule: vSchedule, runs: vRuns, settings: vSettings })[state.tab]();
 }
 
 const projOf = t => t.project || t.id;
@@ -191,7 +197,7 @@ function vTasks() {
         </div>
         ${g.tasks.map(t => { const n=(t.plan||[]).length, d=(t.plan||[]).filter(s=>s.done).length; return `
           <div class="task" data-id="${esc(t.id)}" style="border-top:1px solid var(--line);padding:10px 0 4px">
-            <div class="row"><span class="grow">${esc(t.title)}</span><span class="badge s-${esc(t.status)}">${LABEL[t.status]||esc(t.status)}</span></div>
+            <div class="row"><span class="grow">${t.kind === "bug" ? `<span class="sev-${esc(t.severity || "normal")}">🐞</span> ` : ""}${esc(t.title)}</span><span class="badge s-${esc(t.status)}">${LABEL[t.status]||esc(t.status)}</span></div>
             <div class="mute">${n ? `${d}/${n} ขั้นตอน · ` : ""}${t.model ? `🧠 ${esc(modelName(t.model))} · ` : state.config?.default_model ? `🧠 ${esc(modelName(state.config.default_model))} (หลัก) · ` : ""}อัปเดต ${fmt(t.updated)}</div>
             ${n && t.status !== "done" ? `<div class="progress"><i style="width:${Math.round(d/n*100)}%"></i></div>` : ""}
           </div>`; }).join("")}
@@ -231,6 +237,7 @@ function vTask(t) {
     <button id="back">← กลับ</button>
     <div class="card" style="margin-top:12px">
       <div class="row"><h2 class="grow" style="margin:0;font-size:20px">${esc(t.title)}</h2><span class="badge s-${esc(t.status)}">${LABEL[t.status]||esc(t.status)}</span></div>
+      ${t.kind === "bug" ? `<div class="sev-${esc(t.severity || "normal")}" style="font-size:14px">🐞 บั๊ก · ${esc((SEV.find(s => s[0] === (t.severity || "normal")) || SEV[1])[1].split(" — ")[0])}</div>` : ""}
       <div class="mute">${P.repo ? "🐙" : "📁"} ${esc(P.name || projOf(t))}${P.repo ? ` · <a href="https://github.com/${esc(P.repo)}" target="_blank" rel="noopener">${esc(P.repo)}</a>` : ""}</div>
       ${t.detail ? `<p style="white-space:pre-wrap">${esc(t.detail)}</p>` : ""}
       <label for="tm">🧠 โมเดล AI ของงานนี้</label>
@@ -277,6 +284,60 @@ function vTask(t) {
       toast("เริ่มทำงานนี้แล้ว (งานอื่นจะรอช่วงเวลาที่ตั้งไว้)");
     } catch (e) { toast(e.status === 403 ? "Token ไม่มีสิทธิ์ Actions" : e.message); $("#runone").disabled = false; } });
   $("#del").onclick = () => confirmBtn($("#del"), () => { state.open = null; upd(it => { it.deleted = true; }, "app: ลบงาน", "ลบแล้ว"); });
+}
+// ---------- 🐞 จดบั๊ก ----------
+const SEV = [["high", "🔴 ด่วน — ใช้งานไม่ได้/ข้อมูลผิด"], ["normal", "🟠 ปกติ — ใช้ได้แต่ผิดปกติ"], ["low", "⚪ เล็กน้อย — หน้าตา/คำผิด"]];
+function vBugs() {
+  const v = $("#view");
+  if (!state.tasks) { v.innerHTML = `<p class="mute">กำลังโหลด…</p>`; return; }
+  const projects = projList(), names = Object.fromEntries(projects.map(p => [p.id, p.name]));
+  const f = state.bugFilter || "open";
+  const all = state.tasks.filter(t => t.kind === "bug");
+  const shown = all.filter(t => f === "all" || (f === "open" ? t.status !== "done" : t.status === "done"));
+  const order = { high: 0, normal: 1, low: 2 };
+  shown.sort((a, b) => (a.status === "done") - (b.status === "done") || (order[a.severity] ?? 1) - (order[b.severity] ?? 1) || (b.updated || "").localeCompare(a.updated || ""));
+  const groups = [...new Set(shown.map(projOf))];
+  const d = { bp: $("#bp")?.value ?? state.bugProj ?? (projects[0] || {}).id, bt: $("#bt")?.value || "", bs: $("#bs")?.value || "", be: $("#be")?.value || "", bv: $("#bv")?.value || "normal" };
+  const cnt = k => all.filter(t => k === "all" || (k === "open" ? t.status !== "done" : t.status === "done")).length;
+  v.innerHTML = `
+    <div class="card"><b>🐞 จดบั๊ก</b><p class="mute" style="margin:4px 0 0">เจอบั๊กตรงไหนจดไว้ AI จะหาสาเหตุ แก้ และทดสอบให้ (บั๊กด่วนทำก่อน)</p>
+      <label for="bp">โปรเจค</label>
+      <select id="bp">${projects.map(p => `<option value="${esc(p.id)}" ${p.id === d.bp ? "selected" : ""}>${p.repo ? "🐙" : "📁"} ${esc(p.name)}</option>`).join("")}</select>
+      <label for="bt">บั๊กคืออะไร</label><input id="bt" placeholder="เช่น กดบันทึกแล้วข้อมูลหาย">
+      <label for="bs">ทำยังไงถึงเจอ (ไม่บังคับ)</label><textarea id="bs" style="min-height:70px" placeholder="1. เปิดหน้า… 2. กด… 3. เห็นว่า…"></textarea>
+      <label for="be">ควรเป็นยังไง (ไม่บังคับ)</label><input id="be" placeholder="เช่น ข้อมูลควรยังอยู่หลังปิดแอป">
+      <label for="bv">ความรุนแรง</label><select id="bv">${SEV.map(([k, l]) => `<option value="${k}" ${k === d.bv ? "selected" : ""}>${l}</option>`).join("")}</select>
+      <div class="row" style="margin-top:10px"><label class="row" style="margin:0;color:var(--ink)"><input type="checkbox" id="bnow" style="width:20px;height:20px"> แก้ทันที</label>
+        <span class="grow"></span><button class="primary" id="badd">+ จดบั๊ก</button></div>
+    </div>
+    <div class="row" style="margin-bottom:12px">${[["open", "ยังไม่แก้"], ["done", "แก้แล้ว"], ["all", "ทั้งหมด"]].map(([k, l]) => `<span class="chip ${f === k ? "on" : ""}" data-f="${k}">${l} ${cnt(k)}</span>`).join("")}</div>
+    ${shown.length ? "" : `<p class="mute">${f === "open" ? "ไม่มีบั๊กค้าง 🎉" : "ยังไม่มีบั๊กในรายการนี้"}</p>`}
+    ${groups.map(g => `<div class="card"><b>${esc(names[g] || g)}</b>
+      ${shown.filter(t => projOf(t) === g).map(t => `
+        <div class="task" data-id="${esc(t.id)}" style="border-top:1px solid var(--line);padding:10px 0 4px;margin-top:8px">
+          <div class="row"><span class="grow"><span class="sev-${esc(t.severity || "normal")}">●</span> ${esc(t.title)}</span><span class="badge s-${esc(t.status)}">${t.status === "done" ? "แก้แล้ว" : LABEL[t.status] || esc(t.status)}</span></div>
+          <div class="mute">${t.pr ? "🔀 มี PR · " : ""}แจ้ง ${fmt(t.created)}${t.status === "done" ? " · แก้เสร็จ " + fmt(t.updated) : ""}</div>
+        </div>`).join("")}</div>`).join("")}`;
+  $("#bt").value = d.bt; $("#bs").value = d.bs; $("#be").value = d.be;
+  $("#bp").onchange = e => { state.bugProj = e.target.value; };
+  v.querySelectorAll("[data-f]").forEach(c => c.onclick = () => { state.bugFilter = c.dataset.f; vBugs(); });
+  v.querySelectorAll(".task").forEach(el => el.onclick = () => { state.open = el.dataset.id; render(); window.scrollTo(0, 0); });
+  $("#badd").onclick = async () => {
+    const title = $("#bt").value.trim(); if (!title) return toast("ใส่ว่าบั๊กคืออะไรก่อน");
+    const pid = $("#bp").value; if (!pid) return toast("ยังไม่มีโปรเจค สร้างงานหรือนำเข้า repo ก่อน");
+    const steps = $("#bs").value.trim(), exp = $("#be").value.trim(), severity = $("#bv").value, runNow = $("#bnow").checked;
+    const detail = [`อาการ: ${title}`, steps && `ทำยังไงถึงเจอ:\n${steps}`, exp && `ควรเป็น: ${exp}`].filter(Boolean).join("\n\n");
+    $("#badd").disabled = true;
+    try {
+      const id = "b" + Date.now().toString(36);
+      const dd = await mutate("tasks.json", x => { x.tasks.push({ id, project: pid, kind: "bug", severity, title, detail, model: "", model_at: nowIso(),
+        status: "todo", plan: [], log: [], created: nowIso(), updated: nowIso() }); }, `app: แจ้งบั๊ก ${title}`);
+      state.tasks = dd.tasks.filter(x => !x.deleted); state.bugProj = pid;
+      $("#bt").value = $("#bs").value = $("#be").value = "";
+      if (runNow) await runProject(pid); else toast("จดบั๊กแล้ว AI จะแก้ในช่วงเวลาที่ตั้งไว้");
+    } catch (e) { toast(e.message); }
+    vBugs();
+  };
 }
 function confirmBtn(b, fn) { if (b.dataset.c) return fn(); b.dataset.c = 1; const o = b.textContent; b.textContent = "แตะอีกครั้งเพื่อยืนยัน"; setTimeout(() => { b.textContent = o; delete b.dataset.c; }, 3000); }
 

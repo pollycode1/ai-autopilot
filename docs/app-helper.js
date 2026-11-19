@@ -32,7 +32,8 @@
     const p = document.createElement("div"); p.id = "aph-panel";
     p.innerHTML = `<b>สั่ง AI อัปเดตแอปนี้</b><small>ใส่ key ครั้งเดียว แล้วพิมพ์สิ่งที่อยากให้อัปเดต AI จะทำให้บนคลาวด์ เสร็จแล้วปิด-เปิดแอปใหม่เพื่อดูเวอร์ชันล่าสุด</small>
       <label><small>Key (GitHub token ตัวเดียวกับแอป Autopilot)</small><input id="aph-key" type="password" placeholder="github_pat_…"></label>
-      <label><small>อยากให้อัปเดตอะไร</small><textarea id="aph-msg" placeholder="เช่น อัปเดตข้อมูลผลตอบแทนล่าสุด / เพิ่มหุ้นปันผล / แก้หน้าคำนวณ"></textarea></label>
+      <label><small>ประเภท</small><select id="aph-type" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:9px;font:inherit;margin:4px 0 10px;background:#fff;color:#0f172a"><option value="update">✨ ขออัปเดต / เพิ่มฟีเจอร์</option><option value="bug">🐞 แจ้งบั๊ก (มีอะไรผิดปกติ)</option></select></label>
+      <label><small>อยากให้อัปเดตอะไร / เจอบั๊กอะไร</small><textarea id="aph-msg" placeholder="เช่น อัปเดตข้อมูลผลตอบแทนล่าสุด / เพิ่มหุ้นปันผล / แก้หน้าคำนวณ"></textarea></label>
       <div style="display:flex;gap:8px;align-items:center"><button id="aph-close">ปิด</button><span style="flex:1"></span><button class="p" id="aph-send">ส่งให้ AI</button></div>
       <small id="aph-st" style="margin-top:8px"></small>`;
     document.body.append(b, p);
@@ -44,7 +45,7 @@
       const key = $("#aph-key").value.trim(), msg = $("#aph-msg").value.trim();
       if (!key || !msg) { $("#aph-st").textContent = "ใส่ key และข้อความก่อน"; return; }
       store.set("ap-key", key); $("#aph-send").disabled = true; $("#aph-st").textContent = "กำลังส่ง…";
-      try { await requestUpdate(key, msg); $("#aph-msg").value = ""; $("#aph-st").textContent = "✅ ส่งแล้ว AI เริ่มทำงานภายในไม่กี่นาที (ดูความคืบหน้าในแอป Autopilot)"; }
+      try { await requestUpdate(key, msg, $("#aph-type").value === "bug"); $("#aph-msg").value = ""; $("#aph-st").textContent = "✅ ส่งแล้ว AI เริ่มทำงานภายในไม่กี่นาที (ดูความคืบหน้าในแอป Autopilot)"; }
       catch (e) { $("#aph-st").textContent = "❌ " + (e.status === 401 ? "key ไม่ถูกต้องหรือหมดอายุ" : e.status === 403 || e.status === 404 ? "key ไม่มีสิทธิ์เข้าถึง repo นี้" : e.message); }
       $("#aph-send").disabled = false;
     };
@@ -57,7 +58,7 @@
   }
   const b64e = s => { const b = new TextEncoder().encode(s); let r = ""; for (let i = 0; i < b.length; i += 0x8000) r += String.fromCharCode(...b.subarray(i, i + 0x8000)); return btoa(r); };
   const b64d = s => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\n/g, "")), c => c.charCodeAt(0)));
-  async function requestUpdate(key, msg) {
+  async function requestUpdate(key, msg, bug) {
     const now = new Date().toISOString().replace(/\.\d+Z$/, "Z");
     const id = "t" + Date.now().toString(36);
     for (let i = 0; i < 4; i++) {
@@ -65,8 +66,9 @@
       const d = JSON.parse(b64d(j.content));
       d.projects ||= [];
       if (!d.projects.some(p => p.id === APP)) d.projects.push({ id: APP, name: document.title || APP, created: now });
-      d.tasks.push({ id, project: APP, title: "อัปเดตจากในแอป: " + msg.slice(0, 40), detail: msg, status: "todo", plan: [],
-        log: [{ time: now, by: "user", text: "[ขอจากในแอป] " + msg }], created: now, updated: now });
+      d.tasks.push({ id, project: APP, title: (bug ? "" : "อัปเดตจากในแอป: ") + msg.slice(0, 60), detail: msg, status: "todo", plan: [],
+        ...(bug ? { kind: "bug", severity: "normal" } : {}),
+        log: [{ time: now, by: "user", text: (bug ? "[แจ้งบั๊กจากในแอป] " : "[ขอจากในแอป] ") + msg }], created: now, updated: now });
       try {
         await gh(key, "/contents/tasks.json", { method: "PUT", body: JSON.stringify({ message: "app: ขออัปเดต " + APP, sha: j.sha,
           content: b64e(JSON.stringify(d, null, 2) + "\n") }) });

@@ -191,7 +191,9 @@ def next_task(only=None):
             and (not only or t.get("id") == only) and (not ONLY_PROJECT or project_of(t) == ONLY_PROJECT)
             and not locked_by_other(data, project_of(t))]
     rank = {"testing": 0, "doing": 1, "planning": 2, "todo": 3}
-    live.sort(key=lambda t: rank.get(t.get("status", "todo"), 3))
+    sev = {"high": 0, "normal": 1, "low": 2}   # บั๊กด่วนมาก่อนงานอื่นที่สถานะเดียวกัน
+    live.sort(key=lambda t: (rank.get(t.get("status", "todo"), 3),
+                             sev.get(t.get("severity"), 1) if t.get("kind") == "bug" else 1.5))
     return live[0] if live else None
 
 def set_lock(tid, on):
@@ -324,6 +326,9 @@ def work():
             .replace("{WORKDIR}", workdir).replace("{REPO}", proj.get("repo", "")).replace("{BRANCH}", repo_br or "") \
             .replace("{TASK_ID}", tid).replace("{MINUTES}", str(minutes)) \
             .replace("{PROJECT}", pid).replace("{PROJECT_NAME}", project_name(load(), pid))
+        if task.get("kind") == "bug":
+            sevname = {"high": "ด่วน", "low": "เล็กน้อย"}.get(task.get("severity"), "ปกติ")
+            prompt += "\n" + (ROOT / "prompts/bug.md").read_text(encoding="utf-8").replace("{SEVERITY}", sevname)
         model = (task.get("model") or cfg.get("default_model") or "").strip()
         if not valid_model(model):
             add_log(tid, f"⚠️ ชื่อโมเดล '{model[:40]}' ไม่ถูกต้อง — ใช้โมเดลค่าเริ่มต้นแทน"); model = ""
