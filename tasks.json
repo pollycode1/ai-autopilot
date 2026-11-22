@@ -445,10 +445,6 @@
       ],
       "created": "2026-11-22T06:00:47Z",
       "updated": "2026-11-22T06:14:12Z",
-      "lock": {
-        "run": "44991849152",
-        "at": "2026-11-22T06:01:20Z"
-      },
       "pr": "https://github.com/pollycode1/MTB/pull/2"
     },
     {
@@ -502,10 +498,6 @@
       ],
       "created": "2026-11-22T06:11:18Z",
       "updated": "2026-11-22T06:24:12Z",
-      "lock": {
-        "run": "44991849152",
-        "at": "2026-11-22T06:14:13Z"
-      },
       "pr": "https://github.com/pollycode1/MTB/pull/3"
     }
   ]
