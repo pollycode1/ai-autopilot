@@ -58,7 +58,7 @@ def merge(a, b):
             if tid not in out:
                 out[tid] = t; order.append(tid); continue
             cur = out[tid]
-            logs = {(l.get("time"), l.get("text")): l for l in cur.get("log", []) + t.get("log", [])}
+            logs = {(l.get("time"), l.get("text"), tuple(l.get("images") or ())): l for l in cur.get("log", []) + t.get("log", [])}
             win = t if t.get("updated", "") > cur.get("updated", "") else cur
             win = dict(win)
             win["log"] = sorted(logs.values(), key=lambda l: l.get("time", ""))
