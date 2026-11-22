@@ -699,10 +699,25 @@
           "time": "2026-11-22T17:44:40Z",
           "by": "system",
           "text": "⚠️ บันทึกงานลง pollycode1/MTB ไม่สำเร็จ จะลองใหม่รอบหน้า: push ไป ai-autopilot/tmwrgyl5q ไม่ได้: มีการแก้ไขชนกันที่ต้องรวมเอง"
+        },
+        {
+          "time": "2026-11-22T17:46:10Z",
+          "by": "ai",
+          "text": "สร้างไฟล์ใหม่สะอาดอีกครั้ง (working tree ถูกรีเซ็ตกลับ origin/main ทุกรอบ): repos/mtb/.github/workflows/build-apk.yml + README.md (เพิ่มหัวข้อ 'ดาวน์โหลด APK'). ตรวจแล้ว: ไม่มี remote branch ai-autopilot/tmwrgyl5q และ main ไม่มี .github/ อยู่ (git fetch + ls-remote ว่าง) การ push จึงเป็น branch ใหม่ ไม่ควรชน. ทดสอบ: YAML valid (1 job build, 14 steps, on=push main/tag v*/workflow_dispatch, permissions contents:write), ดึง version จาก pubspec = '1.0.0' -> tag v1.0.0-build<run>, ถ้าเป็น tag v* ใช้ชื่อเดิม. build universal ก่อน copy ออก แล้วค่อย split-per-abi กัน output ถูก clean. release เซ็น debug key อยู่แล้ว (android/app/build.gradle.kts) build ใน CI ได้ไม่ต้องมี secret. analyze/test ใช้ '|| true' ไม่บล็อก build. git status แก้แค่ 2 ไฟล์เล็ก (รวม 110 บรรทัด) ไม่มีไฟล์ใหญ่หลุด build/ ถูก .gitignore."
+        },
+        {
+          "time": "2026-11-22T17:46:22Z",
+          "by": "ai",
+          "text": "ตอบเจ้าของ 'โหลดตรงไหน apk': ลิงก์โหลดถาวร = https://github.com/pollycode1/MTB/releases/latest -> หัวข้อ Assets -> แตะ mtb-release.apk (universal ติดตั้งได้ทุกเครื่อง). ตอนนี้ยังไม่มีไฟล์จนกว่า PR นี้ merge เข้า main หรือเจ้าของกด Actions -> Build APK -> Run workflow (CI จะ build แล้วสร้าง Release ให้เอง). สำคัญมาก: 5 รอบก่อนงานโค้ดเสร็จหมดแต่ระบบ commit/push ล้มเหลวทุกครั้งด้วยข้อความ merge conflict ฝั่ง autopilot ('มีการแก้ไขชนกันที่ต้องรวมเอง') ทำให้ PR ไม่เคยถูกเปิด. ไฟล์ในรอบนี้สะอาดและ minimal ที่สุดแล้ว (2 ไฟล์) ขอให้ระบบ push รอบนี้สำเร็จ ถ้ายัง conflict อีกน่าจะต้องให้เจ้าของเคลียร์ branch ai-autopilot/tmwrgyl5q ฝั่ง autopilot ด้วยมือ."
+        },
+        {
+          "time": "2026-11-22T17:46:39Z",
+          "by": "system",
+          "text": "⚠️ บันทึกงานลง pollycode1/MTB ไม่สำเร็จ จะลองใหม่รอบหน้า: push ไป ai-autopilot/tmwrgyl5q ไม่ได้: มีการแก้ไขชนกันที่ต้องรวมเอง"
         }
       ],
       "created": "2026-11-22T06:42:00Z",
-      "updated": "2026-11-22T17:44:40Z",
+      "updated": "2026-11-22T17:46:39Z",
       "lock": {
         "run": "45050580918",
         "at": "2026-11-22T17:44:41Z"
