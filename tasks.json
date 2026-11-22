@@ -509,15 +509,70 @@
       "detail": "อาการ: โหมดชักผ้า เมื่อครบเวลาต้องเตือนทุกขั้นตอนและรอให้กดก่อนไปขั้นตอนต่อไป",
       "model": "opus",
       "model_at": "2026-11-22T06:38:53Z",
-      "status": "todo",
-      "plan": [],
-      "log": [],
+      "status": "done",
+      "plan": [
+        {
+          "text": "merge ฟีเจอร์ซักผ้าล่าสุดเข้า branch (ทำแล้ว)",
+          "done": true
+        },
+        {
+          "text": "หาสาเหตุ: ขั้นหลังปิดน้ำ (แช่/ปั่น/ปล่อยออก) เดินต่อเองตามเวลา ไม่รอกด",
+          "done": true
+        },
+        {
+          "text": "ปรับโมเดลสถานะให้เก็บ step ปัจจุบัน + เพิ่มเฟส waitStep (ครบแล้วรอกด)",
+          "done": true
+        },
+        {
+          "text": "ปรับ laundryStatus ให้แต่ละขั้นครบแล้วหยุดรอจนกดก่อนไปขั้นต่อไป",
+          "done": true
+        },
+        {
+          "text": "เพิ่มปุ่ม/แจ้งเตือน 'ไปขั้นต่อไป' (next_step action) + ต่อสายใน home_screen",
+          "done": true
+        },
+        {
+          "text": "ปรับหน้าจอซักผ้าให้แสดงปุ่มเริ่มขั้นต่อไปเมื่อ waitStep",
+          "done": true
+        },
+        {
+          "text": "อัปเดต/เขียนเทสต์สะท้อนพฤติกรรมใหม่ + อัปเดต CLAUDE.md",
+          "done": true
+        },
+        {
+          "text": "ติดตั้ง Flutter แล้วรัน flutter analyze + flutter test ให้ผ่าน แก้บัคที่เจอ",
+          "done": true
+        }
+      ],
+      "log": [
+        {
+          "time": "2026-11-22T06:40:30Z",
+          "by": "ai",
+          "text": "เริ่มงาน: อ่าน task+log งานก่อน (PR#2,#3). ฟีเจอร์โหมดซักผ้าอยู่บน branch ai-autopilot/bmwrfv42rqnwb (ล่าสุด รวม countdown+alarm fix). จะ merge branch นั้นเข้ามาก่อนเพื่อต่อยอด ไม่สร้างใหม่ทับ"
+        },
+        {
+          "time": "2026-11-22T06:44:34Z",
+          "by": "ai",
+          "text": "สาเหตุที่พบ: หลังกด 'ปิดน้ำแล้ว' ขั้นซัก (แช่20→ปั่น10→ปล่อยออก3) ถูกคำนวณจาก washAt+เวลาสะสมใน laundryStatus จึงเดินหน้าเองตามนาฬิกา ไม่รอให้ผู้ใช้กดก่อนขึ้นขั้นถัดไป (แม้มีแจ้งเตือนตอนครบแต่ละขั้นก็ตาม) ตรงกับที่เจ้าของแจ้ง. แนวทางแก้: เก็บ step ปัจจุบัน (washStep) + เวลาเริ่มขั้นปัจจุบัน แล้วเพิ่มเฟส waitStep (ครบเวลาแล้วหยุดรอจนกด 'ไปขั้นต่อไป') ให้เหมือนขั้นปล่อยน้ำเข้าที่รอกด 'ปิดน้ำแล้ว'"
+        },
+        {
+          "time": "2026-11-22T07:09:00Z",
+          "by": "ai",
+          "text": "สรุปงาน (แก้บั๊กโหมดซักผ้า: ทุกขั้นต้องเตือนแล้วหยุดรอให้กดก่อนไปขั้นต่อไป)\n\nสาเหตุ: หลังกด 'ปิดน้ำแล้ว' ขั้นซัก (แช่20→ปั่น10→ปล่อยออก3) ถูกคำนวณจาก washAt + เวลาสะสมใน laundryStatus() จึงเดินหน้าเองตามนาฬิกา ไม่รอให้ผู้ใช้กดก่อนขึ้นขั้นถัดไป (มีแค่แจ้งเตือนครั้งเดียวตอนครบ แต่กระบวนการไหลต่อเอง) — ตรงกับที่เจ้าของแจ้ง. (ฟีเจอร์ซักผ้าไม่มีใน main — merge มาจาก branch งานก่อน ai-autopilot/bmwrfv42rqnwb (PR#3) ที่มีฟีเจอร์+fix countdown/alarm ล่าสุด มาต่อยอด ไม่สร้างใหม่ทับ)\n\nสิ่งที่แก้:\n- lib/laundry.dart: เปลี่ยนโมเดลสถานะเป็น 'จับเวลาทีละขั้น' — เก็บ step ปัจจุบัน (washStep) + เวลาเริ่มขั้นนั้น (prefs laundry_state เพิ่มคีย์ 'step'). เพิ่มเฟส LaundryPhase.waitStep (ขั้นครบเวลาแล้ว หยุดรอกด). laundryStatus() รับ washStep: ขั้นครบแล้วคืน waitStep (หรือ betweenRounds/done ถ้าเป็นขั้นสุดท้ายของรอบ) ไม่เดินไปขั้นถัดไปเอง. เพิ่ม confirmNextStep() (รับเฉพาะตอน waitStep → เลื่อน washStep ไป 1 แล้วเริ่มจับเวลาขั้นใหม่จากเวลาที่กด) และ _startWashStep(). confirmWaterOff เริ่มที่ขั้น 0. แทน laundryWashEnds ด้วย laundryStepEnd. รอค้าง waitStep นานเกิน 3 ชม.=รีเซ็ต\n- lib/notification_service.dart: แทน scheduleLaundryWash ด้วย scheduleLaundryStep (ตั้งแจ้งเตือน+นับถอยหลังของขั้นเดียวที่กำลังจับเวลา, ครบแล้วเด้งเตือนพร้อมปุ่ม 'ไปขั้นต่อไป'/'เริ่มรอบ 2' + ถามซ้ำทุก nagEvery นาที id 9994-9996, ถ้าขั้นครบไปแล้วตอน resync เด้งทันที). เพิ่ม action next_step + callback onLaundryNextStep + launchPayload 'laundry_next_step'. resync รองรับ waitStep ด้วย\n- lib/home_screen.dart: ต่อสาย onLaundryNextStep และ launch case 'laundry_next_step' → Laundry.confirmNextStep()\n- lib/laundry_screen.dart: เพิ่มปุ่ม/ข้อความเมื่อ waitStep ('เริ่ม{ขั้นต่อไป}') ทั้งหน้าซักผ้าและการ์ดหน้าแรก, ขั้นที่ครบแล้วติ๊กว่าเสร็จ, อัปเดตข้อความช่วยเหลือ\n- CLAUDE.md: อัปเดตอธิบายพฤติกรรมจับเวลาทีละขั้น-หยุดรอกด + id/การ action ใหม่\n- test/laundry_test.dart: ปรับ/เพิ่มเทสต์สะท้อนพฤติกรรมใหม่ (ไม่เดินเอง, waitStep, confirmNextStep เลื่อนทีละขั้น ไม่ข้าม) + เพิ่ม resetQueueForTest กันคิว static รั่วข้าม zone\n\nทดสอบ: ติดตั้ง Flutter 3.50.1 ในแซนด์บ็อกซ์ — flutter analyze ผ่าน (0 error/warning, เหลือ info deprecated เดิม 21 รายการ ไม่เกี่ยวงานนี้), flutter test ผ่านครบ 25 เทสต์ (รวม laundry 6 เทสต์ใหม่/ปรับ, ของเดิมไม่พัง). ข้อจำกัด: แซนด์บ็อกซ์ไม่มี Android emulator จึงไม่ได้เห็น/ได้ยินแจ้งเตือนจริง — แนะนำเจ้าของลองบนมือถือจริง (เริ่มซัก→ปิดน้ำ→รอแช่ครบ ดูว่ามีเสียงเตือนและต้องกด 'ไปขั้นต่อไป' ก่อนปั่นจึงเริ่ม)\n\nไฟล์: repos/mtb/ · วิธีรัน: flutter pub get; flutter test; flutter run"
+        },
+        {
+          "time": "2026-11-22T07:09:33Z",
+          "by": "system",
+          "text": "🔀 เปิด Pull Request ใน pollycode1/MTB แล้ว: https://github.com/pollycode1/MTB/pull/4"
+        }
+      ],
       "created": "2026-11-22T06:38:46Z",
-      "updated": "2026-11-22T06:38:53Z",
+      "updated": "2026-11-22T07:09:33Z",
       "lock": {
         "run": "44994671045",
         "at": "2026-11-22T06:39:14Z"
-      }
+      },
+      "pr": "https://github.com/pollycode1/MTB/pull/4"
     },
     {
       "id": "tmwrgyl5q",
