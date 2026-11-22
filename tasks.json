@@ -719,10 +719,25 @@
           "time": "2026-11-22T17:46:40Z",
           "by": "system",
           "text": "รอบนี้ทำงานนี้ไป 3 ครั้งแล้วยังไม่เสร็จ จะลองใหม่ในรอบถัดไป"
+        },
+        {
+          "time": "2026-11-22T23:20:56Z",
+          "by": "ai",
+          "text": "รอบนี้เปลี่ยนกลยุทธ์เพื่อแก้ปัญหา push ชนซ้ำ 6 รอบ: 6 รอบก่อน 'แก้ README.md' ทุกครั้ง ซึ่งการแก้ไฟล์ tracked เดิมเป็นสาเหตุเดียวที่ทำให้เกิด 3-way merge conflict ตอนระบบ push เข้า ai-autopilot/tmwrgyl5q. รอบนี้จึงทำแบบ 'เพิ่มไฟล์ใหม่ล้วน ไม่แตะไฟล์เดิม': สร้าง .github/workflows/build-apk.yml + DOWNLOAD_APK.md (ย้ายคำอธิบายวิธีโหลดไปไฟล์ใหม่แทนการแก้ README). git status = untracked 2 รายการเท่านั้น ไม่มีการแก้ไฟล์เดิม -> ไม่มีทางเกิด merge conflict. ทดสอบ: YAML valid (1 job build, 14 steps, on=push main/tag v*/workflow_dispatch, permissions contents:write), ดึง version pubspec = '1.0.0' -> tag v1.0.0-build<run>, build universal ก่อน copy ออก แล้ว split-per-abi กัน output ถูก clean, release เซ็น debug key อยู่แล้ว build ใน CI ได้ไม่ต้องมี secret, .gitignore คลุม build/ .dart_tool/ local.properties ครบ. environment ไม่มี Flutter จึงต้องให้ CI รันจริงบน GitHub."
+        },
+        {
+          "time": "2026-11-22T23:21:09Z",
+          "by": "ai",
+          "text": "ตอบเจ้าของ 'โหลดตรงไหน apk': ลิงก์โหลดถาวร = https://github.com/pollycode1/MTB/releases/latest -> หัวข้อ Assets -> แตะ mtb-release.apk (universal ติดตั้งได้ทุกเครื่อง). วิธีใช้สรุปไว้ในไฟล์ DOWNLOAD_APK.md. ไฟล์จะมีให้โหลดเมื่อ workflow Build APK รันครั้งแรก = หลัง PR นี้ merge เข้า main หรือเจ้าของกด Actions -> Build APK -> Run workflow. ยังเซ็น debug key (sideload ได้ ยังไม่ขึ้น Play Store) ถ้าต้องการเซ็น key จริงแจ้งได้จะตั้ง keystore+secrets ให้. สำคัญ: ขอให้ระบบ commit+push รอบนี้สำเร็จ — รอบนี้ไม่แก้ไฟล์เดิมเลยจึงไม่ควร conflict อีก ถ้ายัง push ไม่ขึ้นแปลว่าปัญหาอยู่ที่ประวัติ branch ai-autopilot/tmwrgyl5q ฝั่ง autopilot (ควรลบ/รีเซ็ต branch นั้นแล้วให้สร้างใหม่จาก main)."
+        },
+        {
+          "time": "2026-11-22T23:21:32Z",
+          "by": "system",
+          "text": "⚠️ บันทึกงานลง pollycode1/MTB ไม่สำเร็จ จะลองใหม่รอบหน้า: push ไป ai-autopilot/tmwrgyl5q ไม่ได้: มีการแก้ไขชนกันที่ต้องรวมเอง"
         }
       ],
       "created": "2026-11-22T06:42:00Z",
-      "updated": "2026-11-22T17:46:40Z",
+      "updated": "2026-11-22T23:21:32Z",
       "lock": {
         "run": "45082566536",
         "at": "2026-11-22T23:19:02Z"
