@@ -384,6 +384,21 @@
       "created": "2026-11-19T04:54:33Z",
       "updated": "2026-11-19T05:07:56Z",
       "pr": "https://github.com/pollycode1/classclick/pull/10"
+    },
+    {
+      "id": "bmwrfhkt70r6s",
+      "project": "mtb",
+      "kind": "bug",
+      "severity": "normal",
+      "title": "ให้โหมดสักผ้า แสดงการนับถอยหลังด้วยใน status bar",
+      "detail": "อาการ: ให้โหมดสักผ้า แสดงการนับถอยหลังด้วยใน status bar",
+      "model": "",
+      "model_at": "2026-11-22T06:00:47Z",
+      "status": "todo",
+      "plan": [],
+      "log": [],
+      "created": "2026-11-22T06:00:47Z",
+      "updated": "2026-11-22T06:00:47Z"
     }
   ]
 }
