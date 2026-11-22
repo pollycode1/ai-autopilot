@@ -394,15 +394,62 @@
       "detail": "อาการ: ให้โหมดสักผ้า แสดงการนับถอยหลังด้วยใน status bar",
       "model": "",
       "model_at": "2026-11-22T06:00:47Z",
-      "status": "todo",
-      "plan": [],
-      "log": [],
+      "status": "done",
+      "plan": [
+        {
+          "text": "ดึงฟีเจอร์ซักผ้า (laundry) จาก branch claude/project-thread-1o7xq8 มาใส่ใน branch งานนี้ (cherry-pick เฉพาะ commit ที่เกี่ยวกับซักผ้า)",
+          "done": true
+        },
+        {
+          "text": "ทำให้ build ผ่าน (flutter pub get, flutter analyze) หลัง cherry-pick",
+          "done": true
+        },
+        {
+          "text": "หาสาเหตุบั๊ก: ยืนยันว่าแจ้งเตือนซักผ้าปัจจุบันเป็นแบบครั้งเดียวตอนครบเวลา ไม่มี ongoing notification นับถอยหลังค้างใน status bar",
+          "done": true
+        },
+        {
+          "text": "แก้ไข notification_service.dart/laundry.dart ให้แสดง ongoing notification พร้อมนับถอยหลัง (usesChronometer + chronometerCountDown) ระหว่างแต่ละขั้นของการซักผ้า และยกเลิกเมื่อขั้นนั้นจบ/ยกเลิก/รีเซ็ต",
+          "done": true
+        },
+        {
+          "text": "ทดสอบ: รัน flutter test ของเดิมและเทสต์ที่เพิ่ม/แก้ ให้ผ่านทั้งหมด พร้อม flutter analyze",
+          "done": true
+        },
+        {
+          "text": "สรุปผลงานและปิดงาน",
+          "done": true
+        }
+      ],
+      "log": [
+        {
+          "time": "2026-11-22T06:04:56Z",
+          "by": "ai",
+          "text": "ตรวจสอบพบว่า 'โหมดสักผ้า' คือ 'โหมดซักผ้า' (laundry timer) ซึ่งมีอยู่แล้วแต่ถูกพัฒนาแยกบน branch origin/claude/project-thread-1o7xq8 (ยังไม่ merge เข้า main) ไม่มีใน main/tasks.json ของ mtb เลย จะดึงเฉพาะ commit ที่เกี่ยวกับฟีเจอร์ซักผ้า (80faf6e,3250feb,d5ad0c4,282d26c) เข้ามาใน branch นี้ก่อน (ข้าม commit ที่เป็นเรื่อง CI/signing/crash-report ซึ่งไม่เกี่ยวกับบั๊กนี้) แล้วค่อยแก้บั๊ก: เพิ่มการแสดงนับถอยหลังแบบ live ใน status bar ด้วย ongoing notification + usesChronometer/chronometerCountDown ของ Android (ปัจจุบันมีแค่แจ้งเตือนครั้งเดียวตอนครบเวลาแต่ละขั้น ไม่มีนับถอยหลังค้างไว้ระหว่างรอ)"
+        },
+        {
+          "time": "2026-11-22T06:13:18Z",
+          "by": "ai",
+          "text": "ติดตั้ง Flutter SDK (stable) ในแซนด์บ็อกซ์เพื่อรันจริง: flutter analyze ผ่าน (0 ปัญหาใหม่ ของเดิมมีแต่ info เรื่อง deprecated ไม่เกี่ยวกับงานนี้) และ flutter test ผ่านทั้ง 24 เทสต์ (รวม test/laundry_test.dart 6 เทสต์) ไม่มีของเดิมพัง. หมายเหตุ: แซนด์บ็อกซ์นี้ไม่มี Android emulator จึงไม่สามารถเห็น status bar จริงบนเครื่องได้ — ตรวจสอบด้วยการอ่านโค้ด/เทสต์แทน แนะนำให้เจ้าของลองบนมือถือจริงอีกที (กดเริ่มปล่อยน้ำเข้า แล้วดึง status bar ลงมาดูว่ามีนาฬิกานับถอยหลังค้างอยู่หรือไม่)"
+        },
+        {
+          "time": "2026-11-22T06:13:47Z",
+          "by": "ai",
+          "text": "สรุปงาน:\nสาเหตุ: 'โหมดสักผ้า' = พิมพ์เพี้ยนของ 'โหมดซักผ้า' (laundry timer) ซึ่งพัฒนาไว้ก่อนแล้วบน branch claude/project-thread-1o7xq8 แต่ไม่เคยถูก merge เข้า main — จึงไม่มีอยู่ใน repos/mtb ของ branch งานนี้เลย ได้ cherry-pick 4 commit ที่เป็นฟีเจอร์ซักผ้าล้วนๆ (lib/laundry.dart, lib/laundry_screen.dart + การผูกเข้ากับ home_screen/home_today/notification_service, ข้าม commit อื่นที่เป็นเรื่อง CI/signing/crash-report ซึ่งไม่เกี่ยวกับงานนี้) เข้ามาก่อน จากนั้นตรวจพบบั๊กจริง: การแจ้งเตือนซักผ้าทั้งหมดเป็นแจ้งเตือนครั้งเดียวตอนครบเวลาแต่ละขั้น (_laundryAt/zonedSchedule) ไม่มีการแจ้งเตือนค้างไว้ (ongoing) ที่โชว์นับถอยหลังระหว่างรอเลย — status bar จึงไม่มีตัวเลขนับถอยหลังให้ดู ตรงกับที่เจ้าของแจ้ง\n\nสิ่งที่แก้ (lib/notification_service.dart):\n- เพิ่ม ongoing notification id 9988 (เงียบ ไม่มีเสียง/ปุ่ม) ใช้ usesChronometer+chronometerCountDown ของ Android ให้ระบบนับถอยหลังสดในตัวโดยไม่ต้องให้แอพรันอยู่ (_laundryCountdownDetails/_showLaundryCountdownNow/_scheduleLaundryCountdownAt/_showOrScheduleLaundryCountdown)\n- scheduleLaundryFill: โชว์นับถอยหลังของขั้น 'ปล่อยน้ำเข้า' ทันทีที่เริ่ม\n- scheduleLaundryWash: ไล่ตั้งนับถอยหลังของแต่ละขั้น (แช่ผ้า/ปั่น/ปล่อยน้ำออก) ให้โผล่แทนที่กันตามเวลาขั้นก่อนจบ (คำนวณเวลาเริ่มจากเวลาจบขั้นก่อนหน้า) — สลับข้อความ+เวลาเองแม้ปิดแอพไปแล้ว\n- cancelLaundry: ยกเลิกแจ้งเตือนนับถอยหลังนี้ด้วยตอนกดยกเลิก/รีเซ็ต/เริ่มรอบใหม่\n- อัปเดต CLAUDE.md ให้อธิบาย id 9988 ใหม่นี้ไว้ด้วย\n\nไฟล์ที่แก้/เพิ่ม: lib/notification_service.dart, CLAUDE.md (แก้) + lib/laundry.dart, lib/laundry_screen.dart, lib/home_screen.dart, lib/home_today.dart, lib/home_notifs.dart, lib/main.dart, lib/notif_log.dart, test/laundry_test.dart (นำเข้าจาก cherry-pick ของฟีเจอร์ซักผ้าเดิม)\n\nวิธีทดสอบว่าหายแล้ว: ติดตั้ง Flutter SDK ในแซนด์บ็อกซ์ รัน flutter analyze (ผ่าน ไม่มี issue ใหม่) และ flutter test (ผ่านทั้ง 24 เทสต์ รวม laundry_test.dart เดิม 6 เทสต์ ที่ยังผ่านหมด ไม่พัง) อ่านโค้ด/จำลองลำดับเวลาด้วยมือยืนยัน logic การไล่ขั้นถูกต้อง (จำกัด: แซนด์บ็อกซ์ไม่มี Android emulator จึงไม่เห็น status bar จริง แนะนำให้เจ้าของลองบนมือถือจริงอีกครั้งตอน merge)\n\nสถานะ: โค้ดพร้อม รอเจ้าของตรวจ/ทดสอบบนเครื่องจริงก่อน merge PR"
+        },
+        {
+          "time": "2026-11-22T06:14:12Z",
+          "by": "system",
+          "text": "🔀 เปิด Pull Request ใน pollycode1/MTB แล้ว: https://github.com/pollycode1/MTB/pull/2"
+        }
+      ],
       "created": "2026-11-22T06:00:47Z",
-      "updated": "2026-11-22T06:00:47Z",
+      "updated": "2026-11-22T06:14:12Z",
       "lock": {
         "run": "44991849152",
         "at": "2026-11-22T06:01:20Z"
-      }
+      },
+      "pr": "https://github.com/pollycode1/MTB/pull/2"
     },
     {
       "id": "bmwrfv42rqnwb",
