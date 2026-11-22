@@ -460,15 +460,53 @@
       "detail": "อาการ: การเตือนในโหมดสักผ้าจะเอาเสียงขึ้นดังสุด และจะหยุดเมื่อกดที่ปุ่มเท่านั้นไม่หยุดถ้ากดอย่างอื่น",
       "model": "opus",
       "model_at": "2026-11-22T06:21:36Z",
-      "status": "todo",
-      "plan": [],
-      "log": [],
+      "status": "done",
+      "plan": [
+        {
+          "text": "หาสาเหตุ: อ่าน lib/notification_service.dart ปัจจุบัน (หลังรวมงาน bmwrfhkt70r6s เข้ามา) และเทียบกับ commit cda0eb0 บน branch origin/claude/project-thread-1o7xq8 ('ring in silent mode, loop until tapped, at 80% volume') ซึ่งยังไม่ได้ merge เข้า main — ยืนยันว่าเป็นที่มาของบั๊ก (FLAG_INSISTENT ทำให้เสียงวนจนกว่าจะกดปุ่มเดียว + บูสต์เสียงปลุกเครื่องเป็น 80% ของสุด)",
+          "done": true
+        },
+        {
+          "text": "แก้ _laundryAt ใน lib/notification_service.dart ให้แจ้งเตือนซักผ้าดังแม้ปิดเสียง/โหมดเงียบด้วย audioAttributesUsage.alarm แต่ใช้ระดับเสียงปลุกที่เครื่องตั้งไว้เดิม (ไม่เพิ่มโค้ดดันเสียงเป็น 80%) และไม่ใส่ FLAG_INSISTENT (ไม่ loop ค้าง) ให้ปัด/กดอะไรก็หยุดเสียงได้ ไม่ต้องกดปุ่มเดียว",
+          "done": true
+        },
+        {
+          "text": "อัปเดต CLAUDE.md ส่วนซักผ้าให้อธิบายพฤติกรรมเสียงใหม่ให้ตรงกับโค้ด",
+          "done": true
+        },
+        {
+          "text": "ทดสอบ: flutter pub get, flutter analyze, flutter test ให้ผ่านทั้งหมด (ของเดิมต้องไม่พัง) และอ่านโค้ดยืนยันไม่มี insistent flag/การบูสต์เสียงอีก",
+          "done": true
+        },
+        {
+          "text": "สรุปผลงาน (สาเหตุ/ไฟล์ที่แก้/วิธีทดสอบ) แล้วปิดงาน",
+          "done": true
+        }
+      ],
+      "log": [
+        {
+          "time": "2026-11-22T06:21:44Z",
+          "by": "ai",
+          "text": "สาเหตุที่พบ: branch งานนี้ (ก่อนแก้) สืบมาจาก main ซึ่งไม่มีฟีเจอร์ซักผ้าเลย — ได้ merge เอางานจาก branch ai-autopilot/bmwrfhkt70r6s (งานก่อนหน้าในโปรเจคเดียวกัน, PR #2) เข้ามาก่อนเพื่อได้โค้ด lib/laundry.dart + lib/notification_service.dart ชุดล่าสุดมาต่อยอด (ไม่สร้างใหม่ทับ). ตรวจพบว่าโค้ดที่ merge มายังไม่มีบั๊กนี้ตรงๆ แต่พบ commit cda0eb0 บน origin/claude/project-thread-1o7xq8 (branch ทดลองที่มี pre-release APK ให้โหลด, ยังไม่ merge เข้า main) ชื่อ 'feat: laundry alerts ring in silent mode, loop until tapped, at 80% volume' ซึ่งตรงกับอาการที่แจ้งมาก: เพิ่ม additionalFlags Notification.FLAG_INSISTENT (เสียงวนไม่หยุดจนกว่าจะกด/ปัดแจ้งเตือนเท่านั้น) และ MethodChannel mtb/alarm บูสต์ STREAM_ALARM ของเครื่องเป็น 80% ของสุดระหว่างซักผ้า (คืนค่าเดิมตอนจบ/รีเซ็ต) — เจ้าของแอพน่าจะเคยลองไฟล์ APK ที่ build จาก branch นี้ (มี workflow CI build-apk.yml) แล้วเจอบั๊ก จึงแจ้งผ่าน task เดียวกับที่ main ยังไม่มีของ. สรุป: สาเหตุคือ FLAG_INSISTENT (ทำให้หยุดได้ทางเดียวคือกดปุ่ม) รวมกับการบูสต์เสียงปลุกเครื่องแบบ hardcode 80% (ทำให้รู้สึกว่า 'ดังสุด')."
+        },
+        {
+          "time": "2026-11-22T06:23:51Z",
+          "by": "ai",
+          "text": "สรุปงาน:\nสาเหตุ: branch งานนี้สืบมาจาก main ซึ่งยังไม่มีฟีเจอร์ซักผ้าเลย — ได้ merge งานจาก branch ai-autopilot/bmwrfhkt70r6s (PR #2 ของโปรเจคเดียวกัน) เข้ามาก่อนเพื่อได้โค้ดซักผ้าล่าสุดมาต่อยอด ตรวจพบว่าบั๊กที่แจ้งมา (เสียงขึ้นดังสุด + หยุดได้ทางเดียวคือกดปุ่ม) ตรงกับที่มาของ commit cda0eb0 บน branch ทดลอง origin/claude/project-thread-1o7xq8 (มี workflow build-apk.yml ปล่อย pre-release ให้โหลดลองได้) ชื่อ 'ring in silent mode, loop until tapped, at 80% volume' ซึ่งเพิ่ม Notification.FLAG_INSISTENT (เสียงวนไม่หยุดจนกว่าจะกด/ปัดแจ้งเตือน) และ MethodChannel บูสต์ STREAM_ALARM ของเครื่องเป็น 80% ของสุดระหว่างซักผ้า — เจ้าของแอพน่าจะลอง APK จาก branch นี้มาแล้วเจอบั๊ก จึงแจ้งผ่าน task แม้ main ยังไม่มีโค้ดนี้\n\nสิ่งที่แก้ (lib/notification_service.dart, ฟังก์ชัน _laundryAt ที่ใช้ร่วมกันทุกแจ้งเตือนซักผ้า: ปล่อยน้ำครบ/นาจปิดน้ำ/จบขั้นแช่-ปั่น-ปล่อยออก):\n- เปลี่ยนชื่อ channel เป็น laundry_alarm + เพิ่ม audioAttributesUsage: AudioAttributesUsage.alarm เพื่อให้ยังดังแม้ปิดเสียง/โหมดเงียบ (คงความตั้งใจเดิมของฟีเจอร์ไว้) แต่ดังที่ \"ระดับเสียงปลุก\" ที่เครื่องตั้งไว้เดิมเท่านั้น ไม่มีโค้ดดันเสียงเครื่องเป็น 80% หรือค่าใดๆ เลย (ไม่เพิ่ม MethodChannel/Kotlin ใดๆ)\n- ไม่ใส่ additionalFlags FLAG_INSISTENT เสียงจึงเล่นครั้งเดียวตามปกติ ปัดแจ้งเตือนทิ้ง/กดปุ่มไหนก็ได้/เปิดแอพ หยุดได้หมด ไม่ต้องกดปุ่มเดียวเท่านั้นเหมือนที่แจ้งบั๊กมา\n- อัปเดต CLAUDE.md ส่วนซักผ้าให้อธิบายพฤติกรรมเสียงใหม่ตรงกับโค้ด\n\nไฟล์ที่แก้: lib/notification_service.dart, CLAUDE.md (+ ไฟล์ซักผ้าทั้งชุดที่ merge มาจาก PR #2 เพื่อให้มีฟีเจอร์ให้แก้: lib/laundry.dart, lib/laundry_screen.dart, lib/home_screen.dart, lib/home_today.dart, lib/home_notifs.dart, lib/main.dart, lib/notif_log.dart, test/laundry_test.dart)\n\nวิธีทดสอบว่าหายแล้ว: ติดตั้ง Flutter SDK ในแซนด์บ็อกซ์ (มีจากงานก่อนหน้าแล้ว) รัน flutter pub get, flutter analyze (ผ่าน 21 info เดิมเรื่อง deprecated ไม่เกี่ยวกับงานนี้ ไม่มี issue ใหม่), flutter test (ผ่านทั้ง 24 เทสต์ รวม laundry_test.dart 6 เทสต์ ที่ยังผ่านหมด ไม่พัง) อ่านโค้ดยืนยัน _laundryAt ไม่มี FLAG_INSISTENT และไม่มีการเรียกดันระดับเสียงเครื่องที่ใดเลยในโปรเจค (grep ยืนยันไม่มีคำว่า insistent/boost/AudioManager ค้างอยู่) ข้อจำกัด: แซนด์บ็อกซ์ไม่มี Android emulator จึงไม่ได้ยินเสียงจริงบนเครื่อง แนะนำให้เจ้าของทดสอบบนมือถือจริงอีกครั้ง (ปล่อยน้ำเข้าแล้วลองปัดแจ้งเตือนทิ้ง/กดปุ่มเปิด-ปิดเสียงเครื่อง ดูว่าเสียงหยุดและไม่ดังเกินระดับเสียงปลุกที่ตั้งไว้)\n\nสถานะ: โค้ดพร้อม รอเจ้าของตรวจ/ทดสอบบนเครื่องจริงก่อน merge PR"
+        },
+        {
+          "time": "2026-11-22T06:24:12Z",
+          "by": "system",
+          "text": "🔀 เปิด Pull Request ใน pollycode1/MTB แล้ว: https://github.com/pollycode1/MTB/pull/3"
+        }
+      ],
       "created": "2026-11-22T06:11:18Z",
-      "updated": "2026-11-22T06:21:36Z",
+      "updated": "2026-11-22T06:24:12Z",
       "lock": {
         "run": "44991849152",
         "at": "2026-11-22T06:14:13Z"
-      }
+      },
+      "pr": "https://github.com/pollycode1/MTB/pull/3"
     }
   ]
 }
