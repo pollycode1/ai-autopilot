@@ -669,10 +669,25 @@
           "time": "2026-11-22T08:08:11Z",
           "by": "user",
           "text": "โหลดตรงไหน apk"
+        },
+        {
+          "time": "2026-11-22T17:40:47Z",
+          "by": "ai",
+          "text": "ตอบคำถาม 'โหลดตรงไหน apk': ลิงก์โหลดถาวร = https://github.com/pollycode1/MTB/releases/latest (เลื่อนลงหัวข้อ Assets แล้วแตะ mtb-release.apk — universal ติดตั้งได้ทุกเครื่อง). แต่ตอนนี้ยังโหลดไม่ได้เพราะ workflow ยังไม่เคยรันจริง: 3 รอบก่อนไฟล์ถูกรีเซ็ตเพราะระบบ push ชนกัน (merge conflict ฝั่ง autopilot) PR จึงยังไม่ขึ้น. รอบนี้สร้างไฟล์ใหม่สะอาดอีกครั้ง: .github/workflows/build-apk.yml + README.md (git status แก้แค่ 2 ไฟล์เล็ก ไม่มีไฟล์ใหญ่หลุด build/ ถูก .gitignore). เมื่อ PR นี้ merge เข้า main (หรือเจ้าของกด Actions -> Build APK -> Run workflow) CI จะ build แล้วสร้าง Release ให้ ลิงก์ด้านบนถึงจะมีไฟล์โหลด."
+        },
+        {
+          "time": "2026-11-22T17:40:56Z",
+          "by": "ai",
+          "text": "ทดสอบรอบนี้: YAML valid (2 jobs test+build, triggers push main/tag v*/workflow_dispatch, permissions contents:write, build needs:test, 12 steps), ดึง version จาก pubspec ได้ '1.0.0', build universal ก่อนแล้วค่อย split-per-abi (กัน output ถูก clean), เส้นทาง APK ตรงกับ convention ของ Flutter (build/app/outputs/flutter-apk/). ไม่แตะ lib/ เทสต์เดิมไม่กระทบ. หมายเหตุ: environment ไม่มี Flutter จึงรัน flutter build/test จริงไม่ได้ ต้องให้ CI รันบน GitHub Actions. ขอให้ระบบ commit+push รอบนี้สำเร็จเพื่อเปิด PR ได้."
+        },
+        {
+          "time": "2026-11-22T17:41:13Z",
+          "by": "system",
+          "text": "⚠️ บันทึกงานลง pollycode1/MTB ไม่สำเร็จ จะลองใหม่รอบหน้า: push ไป ai-autopilot/tmwrgyl5q ไม่ได้: มีการแก้ไขชนกันที่ต้องรวมเอง"
         }
       ],
       "created": "2026-11-22T06:42:00Z",
-      "updated": "2026-11-22T08:08:11Z",
+      "updated": "2026-11-22T17:41:13Z",
       "lock": {
         "run": "45050580918",
         "at": "2026-11-22T17:38:41Z"
